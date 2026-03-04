@@ -1,0 +1,46 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+# Visual Studio
+.vs/
+*.sln.iml
+
+# JetBrains Rider
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+htmlcov/
+*.egg-info/
+
+# Docker volumes
+xaf-dynamic-pgdata/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Test artifacts
+tests/debug_*.png
+tests/test-results/
+
+# Temporary files
+run-server-log.bat
+second.png
+third.png
+/c/tmp/

@@ -1,0 +1,86 @@
+﻿@page "/"
+@namespace XafDynamicAssemblies.Blazor.Server
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@using DevExpress.ExpressApp.Blazor.Components
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- meta name="theme-color" content="#000000" -->
+    <title>XafDynamicAssemblies</title>
+    <base href="~/" />
+    <component type="typeof(BootstrapThemeLink)" render-mode="Static" />
+</head>
+<body>
+    <component type="typeof(SplashScreen)" render-mode="Static" param-Caption='"XafDynamicAssemblies"' param-ImagePath='"images/SplashScreen.svg"' />
+
+    <link href="_content/DevExpress.ExpressApp.Blazor/styles.css" asp-append-version="true" rel="stylesheet" />
+    <link href="css/site.css" rel="stylesheet" />
+    <!-- Uncomment this link to enable CSS isolation. For more information, refer to the following topic: https://learn.microsoft.com/en-us/aspnet/core/blazor/components/css-isolation -->
+    <!-- <link href="XafDynamicAssemblies.Blazor.Server.styles.css" rel="stylesheet"> -->
+
+    <app class="d-none">
+        <component type="typeof(App)" render-mode="Server" />
+    </app>
+
+    <component type="typeof(AlertsHandler)" render-mode="Server" />
+
+    <div id="blazor-error-ui">
+        <component type="typeof(BlazorError)" render-mode="Static" />
+    </div>
+
+    <script src="_framework/blazor.server.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <script>
+        (function () {
+            var connection = new signalR.HubConnectionBuilder()
+                .withUrl("/schemaUpdateHub")
+                .withAutomaticReconnect()
+                .build();
+
+            function pollAndReload() {
+                console.log("Polling for server availability...");
+                var interval = setInterval(function () {
+                    fetch("/", { method: "HEAD" })
+                        .then(function (r) {
+                            if (r.ok || r.status === 200 || r.status === 302) {
+                                clearInterval(interval);
+                                console.log("Server is back. Reloading page.");
+                                location.reload();
+                            }
+                        })
+                        .catch(function () { /* still down */ });
+                }, 1000);
+            }
+
+            connection.on("SchemaChanged", function (version, needsRestart) {
+                console.log("Schema updated to v" + version + ". Restart: " + needsRestart);
+                if (needsRestart) {
+                    // Server will restart ~2s after this message. Wait, then poll.
+                    setTimeout(pollAndReload, 3000);
+                }
+                // Field-only changes: no action needed, current circuit uses updated in-memory types
+            });
+
+            connection.start().catch(function (err) {
+                console.warn("Schema update hub connection failed:", err);
+            });
+
+            // If Blazor circuit dies (e.g. server restarted), auto-reload
+            if (typeof Blazor !== "undefined" && Blazor.reconnectionHandler !== undefined) {
+                Blazor.reconnectionHandler = {
+                    onConnectionDown: function () {
+                        console.log("Blazor connection lost. Polling for server...");
+                        setTimeout(pollAndReload, 2000);
+                    },
+                    onConnectionUp: function () { }
+                };
+            }
+        })();
+    </script>
+</body>
+</html>

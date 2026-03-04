@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: xaf-dynamic-postgres
+    environment:
+      POSTGRES_USER: xafdynamic
+      POSTGRES_PASSWORD: xafdynamic
+      POSTGRES_DB: XafDynamicAssemblies
+    ports:
+      - "5434:5432"
+    volumes:
+      - xaf-dynamic-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  python:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: xaf-dynamic-python
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  xaf-dynamic-pgdata:

@@ -1,0 +1,7 @@
+FROM mcr.microsoft.com/playwright/python:v1.49.1-noble
+
+WORKDIR /workspace
+
+# Install Python test dependencies
+COPY tests/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
