@@ -75,6 +75,7 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
                     .HasConversion<string>()
                     .HasMaxLength(20)
                     .HasDefaultValue(CustomClassStatus.Runtime);
+                entity.Property(e => e.IsApiExposed).HasDefaultValue(false);
                 entity.HasMany(e => e.Fields)
                     .WithOne(f => f.CustomClass)
                     .OnDelete(DeleteBehavior.Cascade);
@@ -88,6 +89,11 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
                 entity.Property(e => e.FieldName).HasMaxLength(128).IsRequired();
                 entity.Property(e => e.TypeName).HasMaxLength(256).HasDefaultValue("System.String");
                 entity.Property(e => e.ReferencedClassName).HasMaxLength(128);
+                entity.Property(e => e.IsVisibleInListView).HasDefaultValue(true);
+                entity.Property(e => e.IsVisibleInDetailView).HasDefaultValue(true);
+                entity.Property(e => e.IsEditable).HasDefaultValue(true);
+                entity.Property(e => e.ToolTip).HasMaxLength(512);
+                entity.Property(e => e.DisplayName).HasMaxLength(256);
             });
         }
     }

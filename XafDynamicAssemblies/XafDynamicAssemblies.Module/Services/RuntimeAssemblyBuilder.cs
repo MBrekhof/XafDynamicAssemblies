@@ -168,12 +168,15 @@ namespace XafDynamicAssemblies.Module.Services
 
             foreach (var field in fields)
             {
+                EmitFieldAttributes(sb, field);
+
                 if (IsReferenceField(field))
                 {
                     // Reference field: generate FK property + navigation property
                     var refTypeName = field.ReferencedClassName;
                     var fkPropName = field.FieldName + "Id";
-                    sb.AppendLine($"        public virtual Guid? {fkPropName} {{ get; set; }}");
+                    var guidNullable = field.IsRequired ? "" : "?";
+                    sb.AppendLine($"        public virtual Guid{guidNullable} {fkPropName} {{ get; set; }}");
                     sb.AppendLine($"        [ForeignKey(\"{fkPropName}\")]");
                     sb.AppendLine($"        public virtual {refTypeName} {field.FieldName} {{ get; set; }}");
                 }
@@ -187,6 +190,9 @@ namespace XafDynamicAssemblies.Module.Services
                         nullable = "?";
                     else if (!field.IsRequired && !IsValueType(field.TypeName))
                         nullable = "";
+
+                    if (field.TypeName == "System.String" && field.StringMaxLength.HasValue)
+                        sb.AppendLine($"        [DevExpress.Persistent.Base.Size({field.StringMaxLength.Value})]");
 
                     sb.AppendLine($"        public virtual {clrType}{nullable} {field.FieldName} {{ get; set; }}");
                 }
@@ -216,6 +222,22 @@ namespace XafDynamicAssemblies.Module.Services
                 .Where(f => !string.IsNullOrWhiteSpace(f.FieldName))
                 .OrderBy(f => f.SortOrder)
                 .FirstOrDefault();
+        }
+
+        private static void EmitFieldAttributes(StringBuilder sb, CustomField field)
+        {
+            if (field.IsImmediatePostData)
+                sb.AppendLine("        [ImmediatePostData]");
+            if (!field.IsVisibleInListView)
+                sb.AppendLine("        [VisibleInListView(false)]");
+            if (!field.IsVisibleInDetailView)
+                sb.AppendLine("        [VisibleInDetailView(false)]");
+            if (!field.IsEditable)
+                sb.AppendLine("        [DevExpress.ExpressApp.Editors.Editable(false)]");
+            if (!string.IsNullOrWhiteSpace(field.ToolTip))
+                sb.AppendLine($"        [ToolTip(\"{EscapeString(field.ToolTip)}\")]");
+            if (!string.IsNullOrWhiteSpace(field.DisplayName))
+                sb.AppendLine($"        [DisplayName(\"{EscapeString(field.DisplayName)}\")]");
         }
 
         private static bool IsReferenceField(CustomField field)

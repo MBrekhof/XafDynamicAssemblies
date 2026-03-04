@@ -9,8 +9,9 @@ namespace XafDynamicAssemblies.Module.Services
     /// Coordinates hot-load of runtime entities.
     /// SemaphoreSlim-guarded sequence: DDL → Roslyn → update DbContext.RuntimeEntityTypes →
     /// register in TypesInfo → notify.
-    /// When the set of type names changes, RestartNeeded is set so the host can restart
-    /// and XAF rebuilds its application model with the new types.
+    /// RestartNeeded is always set after any successful compilation because XAF's
+    /// process-static TypesInfo and SharedApplicationModelManagerContainer cannot be
+    /// properly reset in-process.
     /// </summary>
     public class SchemaChangeOrchestrator
     {
@@ -27,9 +28,8 @@ namespace XafDynamicAssemblies.Module.Services
         public int SchemaVersion => _schemaVersion;
 
         /// <summary>
-        /// True if the last hot-load changed the set of type names (added/removed classes),
-        /// meaning the host must restart so XAF rebuilds its application model.
-        /// Field-only changes don't require restart.
+        /// Always true after any successful compilation. XAF's process-static TypesInfo
+        /// cannot be reset in-process, so every recompilation requires a process restart.
         /// </summary>
         public bool RestartNeeded { get; private set; }
 

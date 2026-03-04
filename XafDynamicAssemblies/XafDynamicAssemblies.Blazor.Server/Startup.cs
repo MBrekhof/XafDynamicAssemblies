@@ -1,14 +1,18 @@
 ﻿using DevExpress.ExpressApp.ApplicationBuilder;
 using DevExpress.ExpressApp.Blazor.ApplicationBuilder;
 using DevExpress.ExpressApp.Blazor.Services;
+using DevExpress.ExpressApp.WebApi.Services;
 using DevExpress.Persistent.Base;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.OData;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.OpenApi.Models;
 using XafDynamicAssemblies.Blazor.Server.Hubs;
 using XafDynamicAssemblies.Blazor.Server.Services;
+using XafDynamicAssemblies.Module.BusinessObjects;
 using XafDynamicAssemblies.Module.Services;
 
 namespace XafDynamicAssemblies.Blazor.Server
@@ -35,6 +39,11 @@ namespace XafDynamicAssemblies.Blazor.Server
             // Set connection string for runtime entity bootstrap (before XAF initializes)
             XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString =
                 Configuration.GetConnectionString("ConnectionString");
+
+            // Early bootstrap: compile runtime types before XAF init so they're available
+            // for Web API endpoint registration below. BootstrapRuntimeEntities (in Module.Setup)
+            // will reuse the already-compiled assembly.
+            XafDynamicAssemblies.Module.XafDynamicAssembliesModule.EarlyBootstrap();
 
             services.AddXaf(Configuration, builder =>
             {
@@ -91,6 +100,41 @@ namespace XafDynamicAssemblies.Blazor.Server
                     })
                     .AddNonPersistent();
             });
+
+            services.AddXafWebApi(Configuration, options =>
+            {
+                // Always expose metadata entities
+                options.BusinessObject<CustomClass>();
+                options.BusinessObject<CustomField>();
+
+                // Expose runtime entities marked with IsApiExposed
+                var apiClassNames = XafDynamicAssemblies.Module.XafDynamicAssembliesModule.ApiExposedClassNames;
+                foreach (var type in XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes)
+                {
+                    if (apiClassNames.Contains(type.Name))
+                    {
+                        options.BusinessObject(type);
+                    }
+                }
+            });
+
+            services.AddControllers().AddOData((options, serviceProvider) =>
+            {
+                options
+                    .AddRouteComponents("api/odata", new EdmModelBuilder(serviceProvider).GetEdmModel())
+                    .EnableQueryFeatures(100);
+            });
+
+            services.AddSwaggerGen(c =>
+            {
+                c.EnableAnnotations();
+                c.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Title = "XafDynamicAssemblies API",
+                    Version = "v1",
+                    Description = "OData REST API for runtime and compiled entities"
+                });
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -99,6 +143,11 @@ namespace XafDynamicAssemblies.Blazor.Server
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
+                app.UseSwagger();
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "XafDynamicAssemblies API v1");
+                });
             }
             else
             {
@@ -116,8 +165,8 @@ namespace XafDynamicAssemblies.Blazor.Server
                 endpoints.MapXafEndpoints();
                 endpoints.MapBlazorHub();
                 endpoints.MapHub<SchemaUpdateHub>("/schemaUpdateHub");
-                endpoints.MapFallbackToPage("/_Host");
                 endpoints.MapControllers();
+                endpoints.MapFallbackToPage("/_Host");
             });
 
             // Allow RestartService to trigger graceful shutdown for hot-load restart
@@ -135,8 +184,8 @@ namespace XafDynamicAssemblies.Blazor.Server
                 // Notify clients with restart flag so they know whether to poll for reconnection
                 _ = hubContext.Clients.All.SendAsync("SchemaChanged", version, needsRestart);
 
-                // Only restart if the set of type names changed (new/removed classes).
-                // Field-only changes are handled in-memory without restart.
+                // Every compilation requires a process restart because XAF's
+                // process-static TypesInfo cannot be reset in-process.
                 if (needsRestart)
                 {
                     _ = Task.Run(async () =>

@@ -1,10 +1,10 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: All 8 Phases Complete — 68/68 Tests Passing
+## Current Status: All 10 Phases Complete — 104/104 Tests Passing
 ## Full regression passed on 2026-03-04
 
 ## Test Results (per-phase standalone)
-- **68 tests total** across Phases 1-8
+- **104 tests total** across Phases 1-10
 - Phase 1: 11 tests (metadata CRUD)
 - Phase 2: 13 tests (runtime entity setup + compilation + CRUD)
 - Phase 3: 9 tests (validation, type dropdown, test compile)
@@ -13,8 +13,19 @@
 - Phase 6: 9 tests (graduation, source generation, data preservation)
 - Phase 7: 7 tests (degraded mode, error recovery, empty metadata, restart recovery)
 - Phase 8: 4 tests (bulk 10-class compilation, CRUD, concurrent access)
+- Phase 9: (review fixes)
+- Phase 10: 36 tests (Web API OData endpoints, Swagger, CRUD, query features, IsApiExposed toggle)
 
 ## What Was Done
+
+### Phase 10 — Web API (OData)
+- `Module/BusinessObjects/CustomClass.cs` — Added `IsApiExposed` bool property
+- `Module/BusinessObjects/XafDynamicAssembliesDbContext.cs` — Added `HasDefaultValue(false)` for IsApiExposed
+- `Module/Module.cs` — Added `EarlyBootstrap()`, `ApiExposedClassNames`, updated `QueryMetadata()` SQL with defensive column check
+- `Blazor.Server/Startup.cs` — Added `AddXafWebApi()`, `AddControllers().AddOData()`, Swagger, `EarlyBootstrap()` call
+- `Blazor.Server/XafDynamicAssemblies.Blazor.Server.csproj` — Added DevExpress.ExpressApp.WebApi + Swashbuckle NuGet packages
+- `Module/Services/GraduationService.cs` — Added Web API note to graduation output when IsApiExposed=true
+- `tests/tests/test_phase10_web_api.py` — 36 tests (Swagger, OData CRUD, query features, API toggle)
 
 ### Phase 6 — Graduation
 - `Module/Services/GraduationService.cs` — Generates production C# source + DbContext snippet + migration note

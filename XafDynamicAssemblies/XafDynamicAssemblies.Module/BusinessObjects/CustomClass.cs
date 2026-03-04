@@ -31,6 +31,12 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         public virtual IList<CustomField> Fields { get; set; } = new ObservableCollection<CustomField>();
 
         /// <summary>
+        /// When true, this runtime entity is exposed via the Web API (OData CRUD endpoints).
+        /// Takes effect after the next Deploy (process restart).
+        /// </summary>
+        public virtual bool IsApiExposed { get; set; }
+
+        /// <summary>
         /// Stores the generated C# source code after graduation.
         /// </summary>
         [VisibleInListView(false)]

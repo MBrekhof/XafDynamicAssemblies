@@ -41,6 +41,7 @@ namespace XafDynamicAssemblies.Module
             CurrentApplication = null;
             DegradedMode = false;
             DegradedModeReason = null;
+            ApiExposedClassNames = new();
 
             // Reset XAF's TypesInfo to force full re-initialization on next host.
             // Without this, the process-static TypesInfo retains type registrations
@@ -100,6 +101,12 @@ namespace XafDynamicAssemblies.Module
         /// Used by SchemaChangeOrchestrator to update the model after hot-load.
         /// </summary>
         public static XafApplication CurrentApplication { get; private set; }
+
+        /// <summary>
+        /// Class names marked as API-exposed in metadata. Populated during EarlyBootstrap/BootstrapRuntimeEntities.
+        /// Used by Startup.cs to register Web API endpoints for the correct subset of runtime types.
+        /// </summary>
+        public static HashSet<string> ApiExposedClassNames { get; private set; } = new();
 
         /// <summary>
         /// True when runtime entity compilation failed at startup.
@@ -164,6 +171,45 @@ namespace XafDynamicAssemblies.Module
             base.Setup(moduleManager);
         }
 
+        /// <summary>
+        /// Compile runtime types early (before XAF initializes) so they're available
+        /// for Web API endpoint registration in ConfigureServices.
+        /// Sets RuntimeEntityTypes and ApiExposedClassNames.
+        /// Safe to call multiple times — skips if already compiled.
+        /// </summary>
+        public static void EarlyBootstrap()
+        {
+            if (string.IsNullOrEmpty(RuntimeConnectionString)) return;
+
+            var classes = QueryMetadata(RuntimeConnectionString);
+            if (classes.Count == 0) return;
+
+            // DDL sync (non-fatal)
+            try
+            {
+                var schemaSyncer = new SchemaSynchronizer(RuntimeConnectionString);
+                schemaSyncer.SynchronizeAll(classes);
+            }
+            catch (Exception ddlEx)
+            {
+                Tracing.Tracer.LogError($"[EarlyBootstrap] Schema synchronization failed: {ddlEx.Message}");
+            }
+
+            // Compile if not already loaded
+            if (!AssemblyManager.HasLoadedAssembly || AssemblyManager.RuntimeTypes.Length == 0)
+            {
+                var result = AssemblyManager.LoadNewAssembly(classes);
+                if (result.Success)
+                {
+                    XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = result.RuntimeTypes;
+                }
+            }
+
+            // Track API-exposed classes
+            ApiExposedClassNames = new HashSet<string>(
+                classes.Where(c => c.IsApiExposed).Select(c => c.ClassName));
+        }
+
         private void BootstrapRuntimeEntities(XafApplication application)
         {
             DegradedMode = false;
@@ -213,6 +259,13 @@ namespace XafDynamicAssemblies.Module
 
                 XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = runtimeTypes;
                 RefreshRuntimeTypes(runtimeTypes);
+
+                // Populate API-exposed class names (in case EarlyBootstrap wasn't called)
+                if (ApiExposedClassNames.Count == 0)
+                {
+                    ApiExposedClassNames = new HashSet<string>(
+                        classes.Where(c => c.IsApiExposed).Select(c => c.ClassName));
+                }
 
                 // Seed the orchestrator so it knows the baseline type set
                 SchemaChangeOrchestrator.Instance.SetKnownTypeNames(runtimeTypes.Select(t => t.Name));
@@ -269,13 +322,25 @@ namespace XafDynamicAssemblies.Module
                     return classes;
             }
 
+            // Check if IsApiExposed column exists (may not yet on first run after upgrade)
+            bool hasApiExposedCol = false;
+            using (var colCheck = new NpgsqlCommand(
+                @"SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'CustomClasses' AND column_name = 'IsApiExposed')",
+                conn))
+            {
+                hasApiExposedCol = (bool)colCheck.ExecuteScalar();
+            }
+
             // Query all runtime classes (Status = 'Runtime')
             var classMap = new Dictionary<Guid, CustomClass>();
-            using (var cmd = new NpgsqlCommand(
-                @"SELECT ""ID"", ""ClassName"", ""NavigationGroup"", ""Description"", ""Status""
-                  FROM ""CustomClasses""
-                  WHERE ""Status"" = 'Runtime' AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0)",
-                conn))
+            var selectSql = hasApiExposedCol
+                ? @"SELECT ""ID"", ""ClassName"", ""NavigationGroup"", ""Description"", ""Status"", ""IsApiExposed""
+                    FROM ""CustomClasses""
+                    WHERE ""Status"" = 'Runtime' AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0)"
+                : @"SELECT ""ID"", ""ClassName"", ""NavigationGroup"", ""Description"", ""Status""
+                    FROM ""CustomClasses""
+                    WHERE ""Status"" = 'Runtime' AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0)";
+            using (var cmd = new NpgsqlCommand(selectSql, conn))
             {
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
@@ -285,6 +350,7 @@ namespace XafDynamicAssemblies.Module
                         ClassName = reader.GetString(1),
                         NavigationGroup = reader.IsDBNull(2) ? null : reader.GetString(2),
                         Description = reader.IsDBNull(3) ? null : reader.GetString(3),
+                        IsApiExposed = hasApiExposedCol && !reader.IsDBNull(5) && reader.GetBoolean(5),
                     };
                     var id = reader.GetGuid(0);
                     classMap[id] = cc;

@@ -1,3 +1,4 @@
+using System.Linq;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
 using DevExpress.Persistent.Base;
@@ -34,8 +35,16 @@ namespace XafDynamicAssemblies.Module.Controllers
                 return;
             }
 
-            var classes = new List<CustomClass> { customClass };
-            var result = RuntimeAssemblyBuilder.ValidateCompilation(classes);
+            // Include all runtime classes so cross-references resolve correctly
+            var allClasses = ObjectSpace.GetObjectsQuery<CustomClass>()
+                .Where(cc => cc.Status == CustomClassStatus.Runtime)
+                .ToList();
+
+            // Ensure the current (possibly unsaved) object is in the list
+            if (!allClasses.Any(cc => cc.ID == customClass.ID))
+                allClasses.Add(customClass);
+
+            var result = RuntimeAssemblyBuilder.ValidateCompilation(allClasses);
 
             if (result.Success)
             {

@@ -54,25 +54,37 @@ XafDynamicAssemblies.Win/             # WinForms host (Windows-only, net8.0-wind
 
 Two metadata tables drive everything:
 
-- `CustomClass` (ClassName, NavigationGroup, Description, Status)
+- `CustomClass` (ClassName, NavigationGroup, Description, Status, IsApiExposed)
 - `CustomField` (CustomClassId, FieldName, TypeName, IsDefaultField, Description)
 
 **Startup sequence:** Query metadata → Roslyn compiles all runtime classes into one assembly → `AssemblyLoadContext` loads it → TypesInfo registers types → EF Core model rebuilt → XAF views auto-generated.
 
 **Hot-load sequence (no restart):** `SchemaSynchronizer` runs DDL → Roslyn recompiles → drain active UoW → unload old ALC → load new ALC → rebuild EF Core IModel → refresh TypesInfo → SignalR push to clients.
 
-### Key Implementation Classes (to be built)
+### Key Implementation Classes
 
 | Class | Responsibility |
 |---|---|
 | `RuntimeAssemblyBuilder` | Generates C# source per CustomClass, Roslyn-compiles into one assembly |
 | `AssemblyGenerationManager` | Manages versioned collectible ALCs, drain/unload/load lifecycle |
-| `DynamicDbContextFactory` | Rebuilds EF Core IModel after schema changes (SemaphoreSlim guarded) |
-| `SchemaSynchronizer` | Executes DDL (ALTER TABLE) against SQL Server before assembly rebuild |
+| `DynamicModelCacheKeyFactory` | Forces EF Core model rebuild via ModelVersion counter |
+| `SchemaSynchronizer` | Executes DDL (ALTER TABLE) against PostgreSQL before assembly rebuild |
+| `SchemaChangeOrchestrator` | Coordinates hot-load: DDL → compile → restart via exit code 42 |
+| `GraduationService` | Generates production C# source + DbContext snippet for graduating entities |
 
 ### Entity Relationships
 
 Runtime entities can reference compiled entities (e.g., runtime `EmployeeInformation` → compiled `Company`) and other runtime entities (all compiled in same Roslyn unit). Real SQL FK constraints are created. Inverse navigation on compiled entities is not supported.
+
+### Web API (OData)
+
+Runtime entities can be exposed as OData REST endpoints via XAF's built-in Web API module. Set `IsApiExposed = true` on a CustomClass, then Deploy — after restart, full CRUD endpoints are live at `/api/odata/{ClassName}`.
+
+- **Registration:** `services.AddXafWebApi()` in Startup.cs registers `CustomClass`, `CustomField`, and any runtime types with `IsApiExposed = true`
+- **Timing:** `EarlyBootstrap()` compiles runtime types before XAF init so they're available for Web API endpoint registration in `ConfigureServices`
+- **OData features:** $filter, $select, $expand, $orderby, $top, $skip, $count
+- **Swagger:** Available at `/swagger` in development mode
+- **Endpoint refresh:** Process restart (exit code 42) re-registers endpoints based on current metadata
 
 ### Graduation Path
 
@@ -86,11 +98,17 @@ Runtime entities can be "graduated" to compiled code: `Status = Runtime → Grad
 - Database auto-updates when debugger is attached; throws version mismatch error in production
 - Connection string key: `ConnectionString` in `appsettings.json`
 
-## Type Mapping (SchemaSynchronizer)
+## Type Mapping (SchemaSynchronizer — PostgreSQL)
 
 ```
-System.String   → nvarchar(max)
-System.Decimal  → decimal(18,6)
-System.DateTime → datetime2
-System.Guid     → uniqueidentifier
+System.String   → text
+System.Int32    → integer
+System.Int64    → bigint
+System.Decimal  → numeric(18,6)
+System.Double   → double precision
+System.Single   → real
+System.Boolean  → boolean
+System.DateTime → timestamp without time zone
+System.Guid     → uuid
+System.Byte[]   → bytea
 ```

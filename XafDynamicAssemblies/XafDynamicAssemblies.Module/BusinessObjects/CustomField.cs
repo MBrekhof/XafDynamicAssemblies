@@ -26,6 +26,15 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         public virtual string ReferencedClassName { get; set; }
         public virtual int SortOrder { get; set; }
 
+        // XAF property attributes
+        public virtual bool IsImmediatePostData { get; set; }
+        public virtual int? StringMaxLength { get; set; }
+        public virtual bool IsVisibleInListView { get; set; } = true;
+        public virtual bool IsVisibleInDetailView { get; set; } = true;
+        public virtual bool IsEditable { get; set; } = true;
+        public virtual string ToolTip { get; set; }
+        public virtual string DisplayName { get; set; }
+
         [RuleFromBoolProperty("CustomField_ValidFieldName", DefaultContexts.Save,
             "Field Name must be a valid C# identifier (letters, digits, underscores; cannot start with a digit).")]
         [NotMapped]
@@ -43,5 +52,11 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         [NotMapped]
         [Browsable(false)]
         public bool IsTypeNameValid => string.IsNullOrWhiteSpace(TypeName) || SupportedTypes.IsSupported(TypeName);
+
+        [RuleFromBoolProperty("CustomField_ReferenceRequiresClass", DefaultContexts.Save,
+            "A Reference field requires a Referenced Class Name.")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsReferenceClassValid => TypeName != "Reference" || !string.IsNullOrWhiteSpace(ReferencedClassName);
     }
 }

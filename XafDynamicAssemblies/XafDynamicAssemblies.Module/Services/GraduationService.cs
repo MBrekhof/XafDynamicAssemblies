@@ -44,6 +44,15 @@ namespace XafDynamicAssemblies.Module.Services
             sb.AppendLine("// Simply register the entity in your DbContext and it will use the existing table.");
             sb.AppendLine("// If you need to add new columns later, create a migration as usual.");
 
+            // Section 4: Web API note (if applicable)
+            if (cc.IsApiExposed)
+            {
+                sb.AppendLine();
+                sb.AppendLine("// --- Web API Note ---");
+                sb.AppendLine("// This entity was API-exposed at runtime.");
+                sb.AppendLine($"// Add options.BusinessObject<{cc.ClassName}>() to AddWebApi in Startup.cs.");
+            }
+
             return sb.ToString();
         }
 
@@ -66,13 +75,13 @@ namespace XafDynamicAssemblies.Module.Services
             if (!string.IsNullOrWhiteSpace(cc.Description))
             {
                 sb.AppendLine("/// <summary>");
-                sb.AppendLine($"/// {cc.Description}");
+                sb.AppendLine($"/// {EscapeXmlComment(cc.Description)}");
                 sb.AppendLine("/// </summary>");
             }
 
             sb.AppendLine("[DefaultClassOptions]");
             if (!string.IsNullOrWhiteSpace(cc.NavigationGroup))
-                sb.AppendLine($"[NavigationItem(\"{cc.NavigationGroup}\")]");
+                sb.AppendLine($"[NavigationItem(\"{EscapeString(cc.NavigationGroup)}\")]");
 
             var defaultField = cc.Fields.FirstOrDefault(f => f.IsDefaultField)
                 ?? cc.Fields.FirstOrDefault(f => f.TypeName == "System.String");
@@ -91,13 +100,18 @@ namespace XafDynamicAssemblies.Module.Services
             {
                 if (!string.IsNullOrWhiteSpace(field.Description))
                 {
-                    sb.AppendLine($"    /// <summary>{field.Description}</summary>");
+                    sb.AppendLine($"    /// <summary>{EscapeXmlComment(field.Description)}</summary>");
                 }
+
+                EmitFieldAttributes(sb, field);
 
                 if (IsReferenceField(field))
                 {
                     var fkPropName = field.FieldName + "Id";
-                    sb.AppendLine($"    public virtual Guid? {fkPropName} {{ get; set; }}");
+                    var guidNullable = field.IsRequired ? "" : "?";
+                    if (field.IsRequired)
+                        sb.AppendLine($"    [System.ComponentModel.DataAnnotations.Required]");
+                    sb.AppendLine($"    public virtual Guid{guidNullable} {fkPropName} {{ get; set; }}");
                     sb.AppendLine($"    [ForeignKey(\"{fkPropName}\")]");
                     sb.AppendLine($"    public virtual {field.ReferencedClassName} {field.FieldName} {{ get; set; }}");
                 }
@@ -107,6 +121,10 @@ namespace XafDynamicAssemblies.Module.Services
                     var nullable = !field.IsRequired && IsValueType(field.TypeName) ? "?" : "";
                     if (field.IsRequired)
                         sb.AppendLine($"    [System.ComponentModel.DataAnnotations.Required]");
+
+                    if (field.TypeName == "System.String" && field.StringMaxLength.HasValue)
+                        sb.AppendLine($"    [DevExpress.Persistent.Base.Size({field.StringMaxLength.Value})]");
+
                     sb.AppendLine($"    public virtual {clrType}{nullable} {field.FieldName} {{ get; set; }}");
                 }
                 sb.AppendLine();
@@ -114,6 +132,22 @@ namespace XafDynamicAssemblies.Module.Services
 
             sb.AppendLine("}");
             return sb.ToString();
+        }
+
+        private static void EmitFieldAttributes(StringBuilder sb, CustomField field)
+        {
+            if (field.IsImmediatePostData)
+                sb.AppendLine("    [ImmediatePostData]");
+            if (!field.IsVisibleInListView)
+                sb.AppendLine("    [VisibleInListView(false)]");
+            if (!field.IsVisibleInDetailView)
+                sb.AppendLine("    [VisibleInDetailView(false)]");
+            if (!field.IsEditable)
+                sb.AppendLine("    [Editable(false)]");
+            if (!string.IsNullOrWhiteSpace(field.ToolTip))
+                sb.AppendLine($"    [ToolTip(\"{EscapeString(field.ToolTip)}\")]");
+            if (!string.IsNullOrWhiteSpace(field.DisplayName))
+                sb.AppendLine($"    [DisplayName(\"{EscapeString(field.DisplayName)}\")]");
         }
 
         private static bool IsReferenceField(CustomField field)
@@ -145,6 +179,16 @@ namespace XafDynamicAssemblies.Module.Services
             return typeName is "System.Int32" or "System.Int64" or "System.Decimal"
                 or "System.Double" or "System.Single" or "System.Boolean"
                 or "System.DateTime" or "System.Guid";
+        }
+
+        private static string EscapeString(string s)
+        {
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        private static string EscapeXmlComment(string s)
+        {
+            return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
         }
     }
 }

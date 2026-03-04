@@ -63,8 +63,8 @@ namespace XafDynamicAssemblies.Module.Services
             {
                 if (IsReferenceField(field))
                 {
-                    // FK column: {FieldName}Id uuid NULL
-                    columns.Add($"{QuoteIdentifier(field.FieldName + "Id")} uuid NULL");
+                    var nullable = field.IsRequired ? "NOT NULL" : "NULL";
+                    columns.Add($"{QuoteIdentifier(field.FieldName + "Id")} uuid {nullable}");
                 }
                 else
                 {
@@ -95,7 +95,8 @@ namespace XafDynamicAssemblies.Module.Services
                     var fkColName = field.FieldName + "Id";
                     if (!existingColumns.Contains(fkColName, StringComparer.OrdinalIgnoreCase))
                     {
-                        var sql = $"ALTER TABLE {tableName} ADD COLUMN {QuoteIdentifier(fkColName)} uuid NULL";
+                        var nullable = field.IsRequired ? "NOT NULL" : "NULL";
+                        var sql = $"ALTER TABLE {tableName} ADD COLUMN {QuoteIdentifier(fkColName)} uuid {nullable}";
                         _logger?.LogInformation("Adding FK column: {TableName}.{ColumnName}", cc.ClassName, fkColName);
                         ExecuteNonQuery(conn, sql);
                     }
