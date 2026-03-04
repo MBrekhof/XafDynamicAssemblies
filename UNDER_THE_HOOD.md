@@ -15,6 +15,7 @@ A deep dive into how XafDynamicAssemblies turns metadata rows into running CLR t
 - [XAF Integration Points](#xaf-integration-points)
 - [SignalR Client Reconnection](#signalr-client-reconnection)
 - [Graduation Pipeline](#graduation-pipeline)
+- [Web API (OData) Integration](#web-api-odata-integration)
 - [Error Handling and Degraded Mode](#error-handling-and-degraded-mode)
 - [Validation Rules](#validation-rules)
 - [Testing Architecture](#testing-architecture)
@@ -72,6 +73,7 @@ public class CustomClass : BaseObject
     public virtual string NavigationGroup { get; set; }    // "Billing"
     public virtual string Description { get; set; }
     public virtual CustomClassStatus Status { get; set; }  // Runtime | Compiled
+    public virtual bool IsApiExposed { get; set; }        // Expose via OData Web API
     public virtual string GraduatedSource { get; set; }    // Generated C# after graduation
     public virtual IList<CustomField> Fields { get; set; } // [Aggregated] cascade
 }
@@ -502,6 +504,93 @@ modelBuilder.Entity<Invoice>().ToTable("Invoice");
 ### Step 3: Next Deploy
 
 On the next deploy + restart, `QueryMetadata()` filters `WHERE Status = 'Runtime'`. The graduated entity is excluded from Roslyn compilation. The SQL table and data remain untouched.
+
+If the graduated entity had `IsApiExposed = true`, the graduation output includes a Web API note:
+```csharp
+// Add options.BusinessObject<Invoice>() to AddWebApi in Startup.cs.
+```
+
+---
+
+## Web API (OData) Integration
+
+Runtime entities can be exposed as OData v4 REST endpoints using XAF's built-in Web API module (`DevExpress.ExpressApp.WebApi`).
+
+### Architecture
+
+The Web API uses the same XAF Object Space as the Blazor UI — security, validation, and soft-delete all apply automatically. No custom controllers needed.
+
+```
+Startup.ConfigureServices()
+    │
+    ├── EarlyBootstrap()              ← Compile runtime types BEFORE XAF init
+    │   ├── QueryMetadata()           ← Read CustomClasses + IsApiExposed flags
+    │   ├── SchemaSynchronizer()      ← DDL sync
+    │   └── LoadNewAssembly()         ← Roslyn compile → RuntimeEntityTypes
+    │
+    ├── AddXaf(builder => ...)        ← Standard XAF setup (reuses compiled types)
+    │
+    ├── AddXafWebApi(options => ...)  ← Register OData endpoints
+    │   ├── BusinessObject<CustomClass>()     ← Always exposed
+    │   ├── BusinessObject<CustomField>()     ← Always exposed
+    │   └── BusinessObject(runtimeType)       ← Only if IsApiExposed = true
+    │
+    └── AddControllers().AddOData()   ← OData routing via EdmModelBuilder
+```
+
+### The Timing Problem
+
+`AddXafWebApi()` runs during `ConfigureServices`, before XAF's `Module.Setup()`. The runtime types must already exist at this point. This is why `EarlyBootstrap()` exists — it performs the full metadata query → DDL sync → Roslyn compile cycle as a static method, callable before XAF initializes.
+
+`BootstrapRuntimeEntities()` (called later during `Module.Setup()`) checks `AssemblyManager.HasLoadedAssembly` and reuses the types compiled by `EarlyBootstrap()` instead of recompiling.
+
+### Endpoint Registration
+
+Two separate service registrations are required:
+
+```csharp
+// 1. Register business objects for OData exposure
+services.AddXafWebApi(Configuration, options => {
+    options.BusinessObject<CustomClass>();
+    options.BusinessObject<CustomField>();
+    foreach (var type in RuntimeEntityTypes)
+        if (apiExposedClassNames.Contains(type.Name))
+            options.BusinessObject(type);
+});
+
+// 2. Configure OData routing (required separately)
+services.AddControllers().AddOData((options, serviceProvider) => {
+    options
+        .AddRouteComponents("api/odata", new EdmModelBuilder(serviceProvider).GetEdmModel())
+        .EnableQueryFeatures(100);
+});
+```
+
+### Route Priority
+
+`MapControllers()` must be registered **before** `MapFallbackToPage("/_Host")` in endpoint routing. Otherwise, Blazor's SPA fallback catches `/api/odata/*` requests and returns HTML instead of JSON.
+
+### Defensive Column Check
+
+The `IsApiExposed` column may not exist in the database on first run (before a database update adds it). `QueryMetadata()` checks `information_schema.columns` before including the column in its SQL:
+
+```csharp
+bool hasApiExposedCol = false;
+using (var colCheck = new NpgsqlCommand(
+    @"SELECT EXISTS (SELECT FROM information_schema.columns
+      WHERE table_name = 'CustomClasses' AND column_name = 'IsApiExposed')", conn))
+{
+    hasApiExposedCol = (bool)colCheck.ExecuteScalar();
+}
+```
+
+### Endpoint Refresh
+
+Since runtime types are registered at startup, changing `IsApiExposed` requires a deploy + restart. The process restart (exit code 42) re-reads metadata and registers only the currently-exposed types.
+
+### Swagger
+
+Swashbuckle generates OpenAPI documentation at `/swagger` in development mode. Runtime types are real CLR types, so Swashbuckle's reflection-based schema generation works without any special configuration.
 
 ---
 

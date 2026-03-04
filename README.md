@@ -21,9 +21,10 @@ The entire cycle takes seconds. No developer intervention required.
 - **Entity relationships** — runtime entities can reference other runtime entities or compiled entities, with real SQL foreign keys
 - **Graduation path** — promote runtime entities to compiled C# source code for inclusion in the main codebase
 - **Degraded mode** — if compilation fails at startup, compiled entities still work normally
+- **Web API (OData)** — expose runtime entities as REST endpoints with full CRUD and OData query support
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
-- **68 end-to-end tests** across 8 phases, all passing
+- **123 end-to-end tests** across 10 phases, all passing
 
 ## Tech Stack
 
@@ -35,7 +36,8 @@ The entire cycle takes seconds. No developer intervention required.
 | Database | PostgreSQL 17 (via Npgsql) |
 | UI | Blazor Server (primary), WinForms (secondary) |
 | Real-time | SignalR for schema change notifications |
-| Testing | Playwright (Python) + pytest, 68 E2E tests |
+| Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
+| Testing | Playwright (Python) + pytest, 123 E2E tests |
 | Infrastructure | Docker Compose (PostgreSQL + test runner) |
 
 ## Prerequisites
@@ -98,6 +100,25 @@ Runtime entities can reference:
 
 All references create real SQL foreign key constraints.
 
+### Exposing via Web API (OData)
+
+Runtime entities can be exposed as OData REST endpoints:
+
+1. Open a **Custom Class** in detail view
+2. Check **Is Api Exposed**
+3. Save and click **Deploy Schema**
+4. After restart, full CRUD endpoints are live at `/api/odata/{ClassName}`
+
+**What you get:**
+- `GET /api/odata/{ClassName}` — list with OData query support (`$filter`, `$select`, `$orderby`, `$top`, `$skip`, `$count`)
+- `GET /api/odata/{ClassName}({key})` — single record by ID
+- `POST /api/odata/{ClassName}` — create
+- `PATCH /api/odata/{ClassName}({key})` — update
+- `DELETE /api/odata/{ClassName}({key})` — delete
+- **Swagger UI** at `/swagger` (development mode)
+
+Metadata entities (`CustomClass`, `CustomField`) are always exposed. Runtime entities are opt-in via the `IsApiExposed` flag.
+
 ### Graduating to Compiled Code
 
 When a runtime entity is stable:
@@ -146,7 +167,7 @@ XafDynamicAssemblies/
 │   │   ├── navigation_page.py            # XAF accordion nav
 │   │   ├── list_view_page.py             # Grid interactions
 │   │   └── detail_view_page.py           # Form interactions
-│   └── tests/                            # 8 phases, 68 tests
+│   └── tests/                            # 10 phases, 123 tests
 │       ├── test_phase1_metadata_crud.py
 │       ├── test_phase2_runtime_entities.py
 │       ├── test_phase3_validation.py
@@ -154,7 +175,9 @@ XafDynamicAssemblies/
 │       ├── test_phase5_relationships.py
 │       ├── test_phase6_graduation.py
 │       ├── test_phase7_error_handling.py
-│       └── test_phase8_performance.py
+│       ├── test_phase8_performance.py
+│       ├── test_phase9_review_fixes.py
+│       └── test_phase10_web_api.py
 │
 ├── docker-compose.yml                    # PostgreSQL 17 + Python test runner
 ├── Dockerfile.python                     # Playwright test image
@@ -167,7 +190,7 @@ XafDynamicAssemblies/
 The server must be running via `run-server.bat` / `run-server.sh` (not `dotnet run` directly) because tests trigger deploy+restart cycles.
 
 ```bash
-# Full regression (68 tests, ~20 minutes)
+# Full regression (123 tests, ~30 minutes)
 docker exec xaf-dynamic-python bash -c \
   "cd /workspace && python3 -m pytest tests/tests/ -v --timeout=180"
 
@@ -188,6 +211,8 @@ docker exec xaf-dynamic-python bash -c \
 | 6 — Graduation | 9 | Source generation, status transition, data preservation post-graduation |
 | 7 — Error Handling | 7 | Degraded mode, compilation failure recovery, empty metadata, restart resilience |
 | 8 — Performance | 4 | Bulk 10-class compilation, concurrent page access |
+| 9 — Review Fixes | 19 | Cross-references, required refs, field attributes, graduation escaping |
+| 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
 
 ### Test Environment
 
