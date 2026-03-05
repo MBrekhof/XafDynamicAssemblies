@@ -79,16 +79,20 @@ namespace XafDynamicAssemblies.Module.Services
                 sb.AppendLine("/// </summary>");
             }
 
-            sb.AppendLine("[DefaultClassOptions]");
-            if (!string.IsNullOrWhiteSpace(cc.NavigationGroup))
-                sb.AppendLine($"[NavigationItem(\"{EscapeString(cc.NavigationGroup)}\")]");
+            if (!cc.GenerateAsPartial)
+            {
+                sb.AppendLine("[DefaultClassOptions]");
+                if (!string.IsNullOrWhiteSpace(cc.NavigationGroup))
+                    sb.AppendLine($"[NavigationItem(\"{EscapeString(cc.NavigationGroup)}\")]");
 
-            var defaultField = cc.Fields.FirstOrDefault(f => f.IsDefaultField)
-                ?? cc.Fields.FirstOrDefault(f => f.TypeName == "System.String");
-            if (defaultField != null)
-                sb.AppendLine($"[DefaultProperty(\"{defaultField.FieldName}\")]");
+                var defaultField = cc.Fields.FirstOrDefault(f => f.IsDefaultField)
+                    ?? cc.Fields.FirstOrDefault(f => f.TypeName == "System.String");
+                if (defaultField != null)
+                    sb.AppendLine($"[DefaultProperty(\"{defaultField.FieldName}\")]");
+            }
 
-            sb.AppendLine($"public class {cc.ClassName} : BaseObject");
+            var partial = cc.GenerateAsPartial ? "partial " : "";
+            sb.AppendLine($"public {partial}class {cc.ClassName} : BaseObject");
             sb.AppendLine("{");
 
             var fields = cc.Fields

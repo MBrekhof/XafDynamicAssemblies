@@ -74,6 +74,7 @@ public class CustomClass : BaseObject
     public virtual string Description { get; set; }
     public virtual CustomClassStatus Status { get; set; }  // Runtime | Compiled
     public virtual bool IsApiExposed { get; set; }        // Expose via OData Web API
+    public virtual bool GenerateAsPartial { get; set; }   // Generate partial class (no attributes)
     public virtual string GraduatedSource { get; set; }    // Generated C# after graduation
     public virtual IList<CustomField> Fields { get; set; } // [Aggregated] cascade
 }
@@ -422,7 +423,7 @@ Each runtime class gets:
 
 ### Controller Registration
 
-Custom controllers (Deploy Schema, Graduate, Test Compile) are standard XAF controllers registered through the module system. They appear as toolbar actions on the appropriate views.
+Custom controllers (Deploy Schema, Graduate, Test Compile All) are standard XAF controllers registered through the module system. They appear as toolbar actions on the appropriate views. "Test Compile All" appears on the CustomClass **ListView** and compiles all runtime classes in a single Roslyn pass — the same operation the deploy pipeline performs internally.
 
 ---
 
@@ -479,7 +480,7 @@ Graduation moves a runtime entity to compiled code:
 
 `GraduationService.ExportSource()` creates three artifacts:
 
-**1. C# class file:**
+**1. C# class file (full class — default):**
 ```csharp
 // Generated from runtime entity 'Invoice'
 // Graduated on 2026-03-04
@@ -499,6 +500,26 @@ namespace YourNamespace
     }
 }
 ```
+
+**1b. C# class file (partial class — when `GenerateAsPartial = true`):**
+```csharp
+// Generated from runtime entity 'Invoice'
+// Graduated on 2026-03-04
+using DevExpress.ExpressApp;
+using DevExpress.Persistent.Base;
+using DevExpress.Persistent.BaseImpl.EF;
+
+namespace YourNamespace
+{
+    public partial class Invoice : BaseObject
+    {
+        public virtual string InvoiceNumber { get; set; }
+        public virtual decimal? TotalAmount { get; set; }
+    }
+}
+```
+
+When `GenerateAsPartial` is true, the class-level attributes (`[DefaultClassOptions]`, `[NavigationItem]`, `[DefaultProperty]`) are omitted, and the class is declared `partial`. This allows developers to supply those attributes (and any custom logic) in a separate partial class file after graduation.
 
 **2. DbContext snippet:**
 ```csharp
@@ -527,6 +548,21 @@ If the graduated entity had `IsApiExposed = true`, the graduation output include
 ```csharp
 // Add options.BusinessObject<Invoice>() to AddWebApi in Startup.cs.
 ```
+
+### Visual Warnings for Graduated Entities
+
+Appearance rules and warning controllers make graduated entities visually distinct:
+
+- **Compiled** entities appear in **gray italic** in the CustomClass ListView
+- **Graduating** entities appear in **orange italic** in the CustomClass ListView
+- `GraduationWarningDetailController` shows a warning banner on the DetailView for any non-Runtime entity, explaining that it should be removed from metadata after the compiled class is deployed
+- `GraduationWarningListController` shows a warning banner on the CustomClass ListView when any graduated entities exist
+
+Font styling uses `DevExpress.Drawing.DXFontStyle` (not `System.Drawing.FontStyle`), which is required for DevExpress 25.2's cross-platform drawing layer.
+
+### DatabaseVersionMismatch Auto-Update Fix
+
+`BlazorApplication.DatabaseVersionMismatch` now always calls `e.Updater.Update()` and sets `e.Handled = true`, regardless of whether a debugger is attached. Previously, the default XAF behavior threw an exception in non-debugger mode, which caused the graduation flow to crash: graduation sets `Status = Compiled` → deploy triggers `Environment.Exit(42)` → wrapper script restarts → new process sees a DB version mismatch (the graduated entity is gone from the model) → exception. Auto-updating on every restart eliminates this failure.
 
 ---
 

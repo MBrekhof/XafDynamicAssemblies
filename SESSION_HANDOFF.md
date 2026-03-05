@@ -3,6 +3,44 @@
 ## Current Status: All 10 Phases Complete — 104/104 Tests Passing
 ## Full regression passed on 2026-03-04
 
+### Session 2026-03-05 — Graduation fixes, Test Compile UX, Partial class support
+
+**Test Compile moved to ListView:**
+- `TestCompileController` changed from `ObjectViewController<DetailView>` to `ObjectViewController<ListView>`
+- Caption: "Test Compile All" — reflects that it always compiled all runtime classes
+- `SelectionDependencyType.Independent` so the button is always enabled
+- Tests in phase 3 and phase 9 updated to match
+
+**Graduation bug fix:**
+- `BlazorApplication.DatabaseVersionMismatch` now always auto-updates the database
+- Previously, in non-debugger mode (run-server.bat restart loop), it threw an InvalidOperationException on schema mismatch after graduation removed a type from the EF Core model
+- This was the root cause of the "deploy crashes after graduation" bug
+
+**Visual warnings for graduation:**
+- Appearance rules on `CustomClass`: Compiled entities → gray italic, Graduating → orange italic (uses `DevExpress.Drawing.DXFontStyle`)
+- New `GraduationWarningController.cs` with two controllers:
+  - `GraduationWarningDetailController` — shows warning banner when viewing non-Runtime entity
+  - `GraduationWarningListController` — shows warning when graduated entities exist in the list
+- Improved Graduate action confirmation dialog with detailed explanation of consequences
+
+**GenerateAsPartial option:**
+- New `GenerateAsPartial` bool on `CustomClass`
+- When true, `GraduationService` generates `public partial class Foo : BaseObject` without class-level attributes ([DefaultClassOptions], [NavigationItem], [DefaultProperty])
+- Allows developer to provide attributes on a hand-written partial class
+
+**New file:** BACKBURNER.md — future ideas for runtime scripted ViewControllers (Monaco editor, cs-script integration)
+
+**Files changed:**
+- `Module/BusinessObjects/CustomClass.cs` — Added GenerateAsPartial, Appearance attributes
+- `Module/Controllers/TestCompileController.cs` — Moved to ListView
+- `Module/Controllers/GraduateController.cs` — Improved confirmation message
+- `Module/Controllers/GraduationWarningController.cs` — NEW
+- `Module/Services/GraduationService.cs` — Partial class support
+- `Blazor.Server/BlazorApplication.cs` — Always auto-update DB on version mismatch
+- `tests/tests/test_phase3_validation.py` — Updated for ListView Test Compile
+- `tests/tests/test_phase9_review_fixes.py` — Updated for ListView Test Compile
+- `BACKBURNER.md` — NEW
+
 ## Test Results (per-phase standalone)
 - **104 tests total** across Phases 1-10
 - Phase 1: 11 tests (metadata CRUD)

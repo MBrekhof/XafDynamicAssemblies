@@ -22,9 +22,15 @@ namespace XafDynamicAssemblies.Module.Controllers
             _graduateAction = new SimpleAction(this, "GraduateEntity", PredefinedCategory.Edit)
             {
                 Caption = "Graduate",
-                ConfirmationMessage = "Graduate this entity to compiled code? It will be removed from runtime compilation on next deploy.",
+                ConfirmationMessage = "WARNING: This will mark the entity as Compiled and exclude it from runtime compilation on next Deploy.\n\n" +
+                    "After graduation:\n" +
+                    "• The generated C# source will be stored in the 'Graduated Source' field\n" +
+                    "• The entity's nav item will disappear after the next Deploy\n" +
+                    "• The database table and data are preserved\n" +
+                    "• To undo, change Status back to Runtime\n\n" +
+                    "Continue?",
                 ImageName = "Action_Grant",
-                ToolTip = "Export entity as production C# source and mark as Compiled",
+                ToolTip = "Generate production C# source and mark as Compiled (excluded from runtime)",
             };
             _graduateAction.Execute += GraduateAction_Execute;
         }

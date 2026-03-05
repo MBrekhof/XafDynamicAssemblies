@@ -251,19 +251,18 @@ class TestCompileCrossReference:
         assert lv.has_row_with_text("ChildName"), "ChildName field should exist"
 
     def test_05_test_compile_cross_ref_succeeds(self, page):
-        """Test Compile on P9Child should succeed since all classes are compiled together."""
+        """Test Compile All from ListView should succeed since all classes are compiled together."""
         nav, lv = nav_to_custom_class(page)
-        lv.double_click_row_with_text("P9Child")
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1000)
 
-        compile_btn = page.locator('dxbl-toolbar-item[text="Test Compile"]')
-        assert compile_btn.count() > 0, "Test Compile action should be visible"
+        compile_btn = page.locator('dxbl-toolbar-item[text="Test Compile All"]')
+        assert compile_btn.count() > 0, "Test Compile All action should be visible"
         compile_btn.first.click()
         page.wait_for_timeout(3000)
 
         body_text = page.locator("body").inner_text()
         assert "successful" in body_text.lower() or "success" in body_text.lower(), \
-            f"Test Compile should succeed for cross-reference. Page text: {body_text[:500]}"
+            f"Test Compile All should succeed for cross-reference. Page text: {body_text[:500]}"
 
 
 # =============================================================================

@@ -217,17 +217,14 @@ class TestTypeNameDropdown:
 
 
 class TestTestCompileAction:
-    """Tests for the Test Compile action on CustomClass DetailView."""
+    """Tests for the Test Compile All action on CustomClass ListView."""
 
     def test_08_test_compile_success(self, page):
-        """Create a valid class and verify Test Compile shows success."""
+        """Verify Test Compile All on the ListView shows success for all runtime classes."""
         nav, lv = nav_to_custom_class(page)
 
-        # Open the ValidTestClass created in test_04
-        if lv.has_row_with_text("ValidTestClass"):
-            lv.double_click_row_with_text("ValidTestClass")
-        else:
-            # Create it if it doesn't exist
+        # Ensure at least one runtime class exists (ValidTestClass from test_04)
+        if not lv.has_row_with_text("ValidTestClass"):
             lv.click_new()
             page.wait_for_timeout(1000)
             detail = DetailViewPage(page)
@@ -237,13 +234,12 @@ class TestTestCompileAction:
             page.wait_for_timeout(2000)
             nav.navigate_to("Schema Management", "Custom Class")
             lv.wait_for_grid()
-            lv.double_click_row_with_text("ValidTestClass")
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1000)
 
-        # Click the Test Compile action
-        compile_btn = page.locator('dxbl-toolbar-item[text="Test Compile"]')
-        assert compile_btn.count() > 0, "Test Compile action should be visible on CustomClass DetailView"
+        # Click the Test Compile All action on the ListView
+        compile_btn = page.locator('dxbl-toolbar-item[text="Test Compile All"]')
+        assert compile_btn.count() > 0, "Test Compile All action should be visible on CustomClass ListView"
 
         compile_btn.first.click()
         page.wait_for_timeout(3000)

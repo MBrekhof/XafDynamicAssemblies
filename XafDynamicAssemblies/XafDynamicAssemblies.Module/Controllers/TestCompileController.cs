@@ -7,7 +7,7 @@ using XafDynamicAssemblies.Module.Services;
 
 namespace XafDynamicAssemblies.Module.Controllers
 {
-    public class TestCompileController : ObjectViewController<DetailView, CustomClass>
+    public class TestCompileController : ObjectViewController<ListView, CustomClass>
     {
         private readonly SimpleAction _testCompileAction;
 
@@ -15,40 +15,34 @@ namespace XafDynamicAssemblies.Module.Controllers
         {
             _testCompileAction = new SimpleAction(this, "TestCompile", "Edit")
             {
-                Caption = "Test Compile",
-                ToolTip = "Compile this class definition to check for errors without loading it.",
+                Caption = "Test Compile All",
+                ToolTip = "Compile all runtime class definitions to check for errors without loading them.",
                 ImageName = "Action_Debug_Start",
-                ConfirmationMessage = null
+                ConfirmationMessage = null,
+                SelectionDependencyType = SelectionDependencyType.Independent
             };
             _testCompileAction.Execute += TestCompile_Execute;
         }
 
         private void TestCompile_Execute(object sender, SimpleActionExecuteEventArgs e)
         {
-            var customClass = (CustomClass)View.CurrentObject;
-
-            if (string.IsNullOrWhiteSpace(customClass.ClassName))
-            {
-                Application.ShowViewStrategy.ShowMessage(
-                    "Cannot compile: Class Name is empty.",
-                    InformationType.Error);
-                return;
-            }
-
-            // Include all runtime classes so cross-references resolve correctly
             var allClasses = ObjectSpace.GetObjectsQuery<CustomClass>()
                 .Where(cc => cc.Status == CustomClassStatus.Runtime)
                 .ToList();
 
-            // Ensure the current (possibly unsaved) object is in the list
-            if (!allClasses.Any(cc => cc.ID == customClass.ID))
-                allClasses.Add(customClass);
+            if (allClasses.Count == 0)
+            {
+                Application.ShowViewStrategy.ShowMessage(
+                    "No runtime classes to compile.",
+                    InformationType.Warning);
+                return;
+            }
 
             var result = RuntimeAssemblyBuilder.ValidateCompilation(allClasses);
 
             if (result.Success)
             {
-                var msg = $"Test compilation successful! Class '{customClass.ClassName}' compiled without errors.";
+                var msg = $"Test compilation successful! {allClasses.Count} runtime class(es) compiled without errors.";
                 if (result.Warnings.Count > 0)
                     msg += $"\n\nWarnings ({result.Warnings.Count}):\n" + string.Join("\n", result.Warnings);
 
@@ -56,8 +50,7 @@ namespace XafDynamicAssemblies.Module.Controllers
             }
             else
             {
-                var msg = $"Compilation failed for '{customClass.ClassName}':\n" +
-                          string.Join("\n", result.Errors);
+                var msg = "Compilation failed:\n" + string.Join("\n", result.Errors);
 
                 Application.ShowViewStrategy.ShowMessage(msg, InformationType.Error);
             }

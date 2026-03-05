@@ -173,10 +173,14 @@ Export/import history is tracked in **Schema Management > Schema History** with 
 When a runtime entity is stable:
 
 1. Open it in **Custom Class** detail view
-2. Click **Graduate**
+2. Click **Graduate** — a confirmation dialog explains what will happen
 3. The system generates production C# source, a DbContext snippet, and a migration note
 4. Copy the code into your project and deploy
 5. The graduated entity takes over the existing SQL table — zero data migration
+
+**Partial class option:** If `GenerateAsPartial` is checked on a CustomClass, Graduate generates `public partial class Foo : BaseObject` without class-level attributes (`[DefaultClassOptions]`, `[NavigationItem]`, `[DefaultProperty]`), so you can provide those on a hand-written partial in your project.
+
+**Visual warnings:** Graduated entities appear gray and italic in the ListView; Graduating entities appear in orange and italic. A warning banner is shown on the ListView when non-Runtime entities exist, and the DetailView displays a warning message when viewing graduated entities.
 
 ## Solution Structure
 
@@ -202,8 +206,9 @@ XafDynamicAssemblies/
 │   ├── Controllers/                      # XAF actions
 │   │   ├── SchemaChangeController.cs     # Deploy Schema
 │   │   ├── GraduateController.cs         # Graduate
+│   │   ├── GraduationWarningController.cs # Visual warnings for graduated/graduating entities
 │   │   ├── SchemaExportImportController.cs # Export/Import Schema (file download/upload)
-│   │   └── TestCompileController.cs      # Test Compile
+│   │   └── TestCompileController.cs      # Test Compile All (ListView action)
 │   ├── Validation/                       # Name validation rules
 │   └── Module.cs                         # Bootstrap, metadata query
 │
@@ -261,7 +266,7 @@ docker exec xaf-dynamic-python bash -c \
 |-------|-------|----------------|
 | 1 — Metadata CRUD | 11 | Create, read, update, delete CustomClass and CustomField |
 | 2 — Runtime Entities | 13 | Roslyn compilation, entity setup, full CRUD on runtime types |
-| 3 — Validation | 9 | Invalid names, reserved words, type dropdown, test compile action |
+| 3 — Validation | 9 | Invalid names, reserved words, type dropdown, Test Compile All (ListView action) |
 | 4 — Hot-Load | 7 | Deploy action, navigation updates, field addition, data survival across restarts |
 | 5 — Relationships | 8 | Entity references, FK constraints, cross-entity navigation |
 | 6 — Graduation | 9 | Source generation, status transition, data preservation post-graduation |

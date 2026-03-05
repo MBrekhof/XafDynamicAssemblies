@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.ConditionalAppearance;
 using DevExpress.ExpressApp.DC;
 using DevExpress.Persistent.Base;
 using DevExpress.Persistent.BaseImpl.EF;
@@ -20,6 +21,16 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
     [DefaultClassOptions]
     [NavigationItem("Schema Management")]
     [DefaultProperty(nameof(ClassName))]
+    [Appearance("GraduatedEntity", TargetItems = "*",
+        Criteria = "Status = 'Compiled'",
+        Context = "ListView",
+        FontColor = "Gray",
+        FontStyle = DevExpress.Drawing.DXFontStyle.Italic)]
+    [Appearance("GraduatingEntity", TargetItems = "*",
+        Criteria = "Status = 'Graduating'",
+        Context = "ListView",
+        FontColor = "Orange",
+        FontStyle = DevExpress.Drawing.DXFontStyle.Italic)]
     public class CustomClass : BaseObject
     {
         public virtual string ClassName { get; set; }
@@ -37,9 +48,17 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         public virtual bool IsApiExposed { get; set; }
 
         /// <summary>
+        /// When true, Graduate generates a partial class without class-level attributes
+        /// (DefaultClassOptions, NavigationItem, DefaultProperty), so the developer can
+        /// provide those on a hand-written partial.
+        /// </summary>
+        public virtual bool GenerateAsPartial { get; set; }
+
+        /// <summary>
         /// Stores the generated C# source code after graduation.
         /// </summary>
         [VisibleInListView(false)]
+        [FieldSize(FieldSizeAttribute.Unlimited)]
         public virtual string GraduatedSource { get; set; }
 
         [RuleFromBoolProperty("CustomClass_ValidClassName", DefaultContexts.Save,
