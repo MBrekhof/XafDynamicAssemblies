@@ -22,6 +22,7 @@ The entire cycle takes seconds. No developer intervention required.
 - **Graduation path** — promote runtime entities to compiled C# source code for inclusion in the main codebase
 - **Degraded mode** — if compilation fails at startup, compiled entities still work normally
 - **Web API (OData)** — expose runtime entities as REST endpoints with full CRUD and OData query support
+- **AI Schema Assistant** — conversational AI for entity CRUD via natural language (LLMTornado + Claude Sonnet)
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
 - **123 end-to-end tests** across 10 phases, all passing
@@ -119,6 +120,16 @@ Runtime entities can be exposed as OData REST endpoints:
 
 Metadata entities (`CustomClass`, `CustomField`) are always exposed. Runtime entities are opt-in via the `IsApiExposed` flag.
 
+### AI Schema Assistant
+
+Talk to the system in plain English to create, modify, or delete runtime entities:
+
+1. Navigate to **Schema Management > AI Chat**
+2. Type a natural language request, e.g. "Create an Invoice entity with fields Amount (decimal), DueDate (datetime), and IsPaid (boolean)"
+3. The AI creates the metadata — review and deploy as usual
+
+The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 10 schema management tools. It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
+
 ### Graduating to Compiled Code
 
 When a runtime entity is stable:
@@ -145,7 +156,10 @@ XafDynamicAssemblies/
 │   │   ├── SchemaChangeOrchestrator.cs   # Hot-load orchestration
 │   │   ├── DynamicModelCacheKeyFactory.cs# EF Core model invalidation
 │   │   ├── GraduationService.cs          # Source code export
-│   │   └── SupportedTypes.cs             # Type mapping
+│   │   ├── SupportedTypes.cs             # Type mapping
+│   │   ├── AIChatService.cs              # LLMTornado integration + tool loop
+│   │   ├── SchemaAIToolsProvider.cs      # 10 AI tools for schema CRUD
+│   │   └── SchemaDiscoveryService.cs     # ITypesInfo reflection for AI prompt
 │   ├── Controllers/                      # XAF actions
 │   │   ├── SchemaChangeController.cs     # Deploy Schema
 │   │   ├── GraduateController.cs         # Graduate
@@ -177,7 +191,9 @@ XafDynamicAssemblies/
 │       ├── test_phase7_error_handling.py
 │       ├── test_phase8_performance.py
 │       ├── test_phase9_review_fixes.py
-│       └── test_phase10_web_api.py
+│       ├── test_phase10_web_api.py
+│       ├── test_phase11_ai_chat_mocked.py
+│       └── test_phase11_ai_chat_live.py
 │
 ├── docker-compose.yml                    # PostgreSQL 17 + Python test runner
 ├── Dockerfile.python                     # Playwright test image
@@ -213,6 +229,7 @@ docker exec xaf-dynamic-python bash -c \
 | 8 — Performance | 4 | Bulk 10-class compilation, concurrent page access |
 | 9 — Review Fixes | 19 | Cross-references, required refs, field attributes, graduation escaping |
 | 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
+| 11 — AI Chat | 5+ | Live AI entity creation, modification, ambiguity resolution, multi-turn (requires API key) |
 
 ### Test Environment
 
@@ -221,6 +238,7 @@ docker exec xaf-dynamic-python bash -c \
 | `BASE_URL` | `https://host.docker.internal:5001` | App URL from inside Docker |
 | `HEADLESS` | `true` | Headless browser mode |
 | `SLOW_MO` | `0` | Slow down for debugging (ms) |
+| `AI_TEST_API_KEY` | (none) | API key for live AI tests (Phase 11); tests skipped if unset |
 
 ## Database
 

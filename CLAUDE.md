@@ -71,6 +71,9 @@ Two metadata tables drive everything:
 | `SchemaSynchronizer` | Executes DDL (ALTER TABLE) against PostgreSQL before assembly rebuild |
 | `SchemaChangeOrchestrator` | Coordinates hot-load: DDL → compile → restart via exit code 42 |
 | `GraduationService` | Generates production C# source + DbContext snippet for graduating entities |
+| `AIChatService` | LLMTornado integration, conversation history, tool loop, Polly retry |
+| `SchemaAIToolsProvider` | 10 AI tools for schema CRUD and role management |
+| `SchemaDiscoveryService` | ITypesInfo reflection for AI system prompt |
 
 ### Entity Relationships
 
@@ -85,6 +88,17 @@ Runtime entities can be exposed as OData REST endpoints via XAF's built-in Web A
 - **OData features:** $filter, $select, $expand, $orderby, $top, $skip, $count
 - **Swagger:** Available at `/swagger` in development mode
 - **Endpoint refresh:** Process restart (exit code 42) re-registers endpoints based on current metadata
+
+### AI Schema Assistant
+
+Conversational AI interface for creating, modifying, and deleting runtime entities through natural language.
+
+- **LLM integration:** LLMTornado with Claude Sonnet as default, multi-provider support
+- **UI:** DxAIChat as navigation item (Schema Management group)
+- **Tools:** 10 AI functions (list/describe/create/modify/delete entities, validate, pending changes, roles)
+- **System prompt:** Two-tier — lightweight entity list + on-demand `describe_entity` for full details
+- **Config:** `AI` section in `appsettings.json` (API keys in `appsettings.Development.json`)
+- **Testing:** Mocked (mock LLM server, deterministic) + Live (real AI, `@pytest.mark.live_ai`)
 
 ### Graduation Path
 
@@ -112,3 +126,21 @@ System.DateTime → timestamp without time zone
 System.Guid     → uuid
 System.Byte[]   → bytea
 ```
+
+## File Locations
+
+- Entities: `Module/BusinessObjects/CustomClass.cs`, `CustomField.cs`
+- DbContext: `Module/BusinessObjects/XafDynamicAssembliesDbContext.cs`
+- Runtime assembly: `Module/Services/RuntimeAssemblyBuilder.cs`, `AssemblyGenerationManager.cs`
+- Hot-load: `Module/Services/SchemaChangeOrchestrator.cs`, `Module/Controllers/SchemaChangeController.cs`
+- Model cache: `Module/Services/DynamicModelCacheKeyFactory.cs`
+- Graduation: `Module/Services/GraduationService.cs`, `Module/Controllers/GraduateController.cs`
+- Restart: `Blazor.Server/Services/RestartService.cs`, `Blazor.Server/Program.cs` (exit code 42)
+- SignalR: `Blazor.Server/Hubs/SchemaUpdateHub.cs`, `Blazor.Server/Pages/_Host.cshtml`
+- AI Chat: `Module/Services/AIChatService.cs`, `AIChatClient.cs`, `SchemaAIToolsProvider.cs`
+- AI Config: `Module/Services/AIOptions.cs`, `AIServiceCollectionExtensions.cs`
+- AI Discovery: `Module/Services/SchemaDiscoveryService.cs`
+- AI UI: `Blazor.Server/Editors/AIChatViewItem/AIChat.razor`
+- AI Tests: `tests/tests/test_phase11_ai_chat_mocked.py`, `test_phase11_ai_chat_live.py`
+- Mock LLM: `tests/mock_llm/server.py`, `tests/mock_llm/scripts.py`
+- Tests: `tests/` (Playwright Python, page objects in `tests/pages/`)
