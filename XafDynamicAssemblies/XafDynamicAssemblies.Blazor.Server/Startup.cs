@@ -35,6 +35,8 @@ namespace XafDynamicAssemblies.Blazor.Server
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddHttpContextAccessor();
+            services.AddAIServices(Configuration);
+            services.AddDevExpressAI();
             services.AddScoped<CircuitHandler, CircuitHandlerProxy>();
             // Set connection string for runtime entity bootstrap (before XAF initializes)
             XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString =

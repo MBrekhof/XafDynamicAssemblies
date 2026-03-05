@@ -43,8 +43,10 @@
       <IncludeAssets>all</IncludeAssets>
     </PackageReference>
     <PackageReference Include="LlmTornado" Version="3.8.49" />
+    <PackageReference Include="Markdig" Version="0.45.0" />
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
     <PackageReference Include="Microsoft.Extensions.Resilience" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.AI" Version="9.5.0" />
-    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="9.5.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.7.1" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="9.7.1" />
   </ItemGroup>
 </Project>
