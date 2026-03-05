@@ -23,6 +23,7 @@ The entire cycle takes seconds. No developer intervention required.
 - **Degraded mode** — if compilation fails at startup, compiled entities still work normally
 - **Web API (OData)** — expose runtime entities as REST endpoints with full CRUD and OData query support
 - **AI Schema Assistant** — conversational AI for entity CRUD via natural language (LLMTornado + Claude Sonnet)
+- **Schema export/import** — download schema definitions as JSON files, upload to restore or migrate between environments
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
 - **123 end-to-end tests** across 10 phases, all passing
@@ -144,6 +145,15 @@ Talk to the system in plain English to create, modify, or delete runtime entitie
 
 The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 10 schema management tools. It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
 
+### Schema Export / Import
+
+From the **Custom Class** list view, use the toolbar actions:
+
+- **Export Schema** — downloads all runtime entity definitions as a `.json` file (browser file download)
+- **Import Schema** — opens a file picker to upload a `.json` schema file, then creates or updates entities to match
+
+Export/import history is tracked in **Schema Management > Schema History** with timestamps, user, and the full JSON payload.
+
 ### Graduating to Compiled Code
 
 When a runtime entity is stable:
@@ -170,6 +180,7 @@ XafDynamicAssemblies/
 │   │   ├── SchemaChangeOrchestrator.cs   # Hot-load orchestration
 │   │   ├── DynamicModelCacheKeyFactory.cs# EF Core model invalidation
 │   │   ├── GraduationService.cs          # Source code export
+│   │   ├── SchemaExportImportService.cs  # JSON schema export/import
 │   │   ├── SupportedTypes.cs             # Type mapping
 │   │   ├── AIChatService.cs              # LLMTornado integration + tool loop
 │   │   ├── SchemaAIToolsProvider.cs      # 10 AI tools for schema CRUD
@@ -177,6 +188,7 @@ XafDynamicAssemblies/
 │   ├── Controllers/                      # XAF actions
 │   │   ├── SchemaChangeController.cs     # Deploy Schema
 │   │   ├── GraduateController.cs         # Graduate
+│   │   ├── SchemaExportImportController.cs # Export/Import Schema (file download/upload)
 │   │   └── TestCompileController.cs      # Test Compile
 │   ├── Validation/                       # Name validation rules
 │   └── Module.cs                         # Bootstrap, metadata query

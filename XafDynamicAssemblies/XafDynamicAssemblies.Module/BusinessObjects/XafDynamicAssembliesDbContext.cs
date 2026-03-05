@@ -23,6 +23,7 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
 
         public DbSet<CustomClass> CustomClasses { get; set; }
         public DbSet<CustomField> CustomFields { get; set; }
+        public DbSet<SchemaHistory> SchemaHistory { get; set; }
 
         /// <summary>
         /// Runtime entity types compiled by Roslyn. Set by AssemblyGenerationManager at startup/hot-load.
