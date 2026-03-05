@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.DC;
+using DevExpress.ExpressApp.Model.Core;
 using DevExpress.ExpressApp.Updating;
 using DevExpress.Persistent.Base;
 using Npgsql;
@@ -150,6 +151,9 @@ namespace XafDynamicAssemblies.Module
             AdditionalExportedTypes.Add(typeof(DevExpress.Persistent.BaseImpl.EF.HCategory));
             AdditionalExportedTypes.Add(typeof(BusinessObjects.CustomClass));
             AdditionalExportedTypes.Add(typeof(BusinessObjects.CustomField));
+            AdditionalExportedTypes.Add(typeof(BusinessObjects.SchemaPackage));
+            AdditionalExportedTypes.Add(typeof(BusinessObjects.SchemaHistory));
+            AdditionalExportedTypes.Add(typeof(BusinessObjects.AIChat));
         }
         public override IEnumerable<ModuleUpdater> GetModuleUpdaters(IObjectSpace objectSpace, Version versionFromDB)
         {
@@ -165,6 +169,11 @@ namespace XafDynamicAssemblies.Module
             {
                 BootstrapRuntimeEntities(application);
             }
+        }
+        public override void AddGeneratorUpdaters(ModelNodesGeneratorUpdaters updaters)
+        {
+            base.AddGeneratorUpdaters(updaters);
+            updaters.Add(new AIChatDetailViewUpdater());
         }
         public override void Setup(ApplicationModulesManager moduleManager)
         {

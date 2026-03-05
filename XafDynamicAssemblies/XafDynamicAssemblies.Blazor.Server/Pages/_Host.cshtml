@@ -33,6 +33,52 @@
         <component type="typeof(BlazorError)" render-mode="Static" />
     </div>
 
+    <script>
+        window.schemaFile = {
+            download: function (fileName, content) {
+                var blob = new Blob([content], { type: "application/json" });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement("a");
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            },
+            upload: function (accept) {
+                return new Promise(function (resolve) {
+                    var input = document.createElement("input");
+                    input.type = "file";
+                    input.accept = accept || ".json";
+                    input.style.display = "none";
+                    input.addEventListener("change", function () {
+                        if (input.files.length === 0) {
+                            resolve(null);
+                            return;
+                        }
+                        var reader = new FileReader();
+                        reader.onload = function () { resolve(reader.result); };
+                        reader.onerror = function () { resolve(null); };
+                        reader.readAsText(input.files[0]);
+                    });
+                    document.body.appendChild(input);
+                    input.click();
+                    // Handle cancel: file input doesn't fire 'change' on cancel,
+                    // so use a focus event as a fallback.
+                    window.addEventListener("focus", function onFocus() {
+                        window.removeEventListener("focus", onFocus);
+                        setTimeout(function () {
+                            if (input.files.length === 0) {
+                                resolve(null);
+                            }
+                            if (input.parentNode) document.body.removeChild(input);
+                        }, 500);
+                    }, { once: true });
+                });
+            }
+        };
+    </script>
     <script src="_framework/blazor.server.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <script>

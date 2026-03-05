@@ -1,10 +1,43 @@
 import os
+import subprocess
+import time
+
 import pytest
+import requests
 from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
 
 BASE_URL = os.environ.get("BASE_URL", "https://host.docker.internal:5001")
 HEADLESS = os.environ.get("HEADLESS", "true").lower() == "true"
 SLOW_MO = int(os.environ.get("SLOW_MO", "0"))
+MOCK_LLM_PORT = int(os.environ.get("MOCK_LLM_PORT", "5555"))
+
+
+@pytest.fixture(scope="session")
+def mock_llm_server():
+    """Start mock LLM server for AI chat tests."""
+    proc = subprocess.Popen(
+        ["python", "mock_llm/server.py", "--port", str(MOCK_LLM_PORT)],
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    # Wait for server to become healthy
+    for _ in range(30):
+        try:
+            resp = requests.get(f"http://localhost:{MOCK_LLM_PORT}/health")
+            if resp.status_code == 200:
+                break
+        except Exception:
+            time.sleep(0.5)
+    else:
+        proc.terminate()
+        raise RuntimeError(f"Mock LLM server failed to start on port {MOCK_LLM_PORT}")
+    yield proc
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
 
 
 @pytest.fixture(scope="session")

@@ -27,8 +27,12 @@
     <PackageReference Include="DevExpress.ExpressApp.ReportsV2.Blazor" Version="25.2.*" />
     <PackageReference Include="DevExpress.ExpressApp.Scheduler.Blazor" Version="25.2.*" />
     <PackageReference Include="DevExpress.ExpressApp.Validation.Blazor" Version="25.2.*" />
+    <PackageReference Include="DevExpress.AIIntegration.Blazor.Chat" Version="25.2.*" />
     <PackageReference Include="DevExpress.ExpressApp.WebApi" Version="25.2.*" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Markdig" Version="0.45.0" />
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.7.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\XafDynamicAssemblies.Module\XafDynamicAssemblies.Module.csproj" />
