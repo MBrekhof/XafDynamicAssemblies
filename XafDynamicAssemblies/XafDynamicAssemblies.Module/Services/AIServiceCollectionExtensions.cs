@@ -14,25 +14,25 @@ public static class AIServiceCollectionExtensions
         // Bind AI config section
         services.Configure<AIOptions>(configuration.GetSection("AI"));
 
-        // Core services
+        // Singleton: shared TornadoApi instance and schema discovery
+        services.AddSingleton<TornadoApiProvider>();
         services.AddSingleton<SchemaDiscoveryService>();
-        services.AddSingleton<AIChatService>();
         services.AddSingleton<SchemaAIToolsProvider>();
 
-        // IChatClient adapter for DevExpress DxAIChat integration
-        services.AddChatClient(sp =>
+        // Scoped: per-Blazor-circuit chat session with independent history
+        services.AddScoped<AIChatService>();
+
+        // IChatClient adapter — scoped (one per circuit, wraps the scoped AIChatService)
+        services.AddScoped<IChatClient>(sp =>
         {
             var chatService = sp.GetRequiredService<AIChatService>();
             var tools = sp.GetRequiredService<SchemaAIToolsProvider>();
-            var discovery = sp.GetRequiredService<SchemaDiscoveryService>();
 
             // Wire tools — both AIFunction (for execution) and LLMTornado Tool (for schema)
             chatService.ToolFunctions = tools.Tools;
             chatService.TornadoTools = tools.GetTornadoTools();
 
-            // Set initial system prompt (empty runtime entity list — refreshed at chat time)
-            chatService.SystemMessage = discovery.GenerateSystemPrompt(new List<CustomClassSummary>());
-
+            // System prompt is refreshed automatically in AskAsync() with current metadata
             return new AIChatClient(chatService);
         });
 

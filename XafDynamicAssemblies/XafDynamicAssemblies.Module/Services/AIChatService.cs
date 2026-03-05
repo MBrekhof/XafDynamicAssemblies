@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using LlmTornado;
 using LlmTornado.Chat;
@@ -11,16 +10,21 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.Retry;
+using Polly.Timeout;
 
 namespace XafDynamicAssemblies.Module.Services;
 
+/// <summary>
+/// Scoped chat service — each Blazor circuit gets its own instance with
+/// independent conversation history. The expensive TornadoApi is shared
+/// via the singleton <see cref="TornadoApiProvider"/>.
+/// </summary>
 public sealed class AIChatService : IDisposable
 {
     private readonly AIOptions _options;
     private readonly ILogger<AIChatService> _logger;
-    private TornadoApi _api;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
-    private bool _initialized;
+    private readonly TornadoApiProvider _apiProvider;
+    private readonly SchemaDiscoveryService _discoveryService;
 
     private readonly List<ChatMessageEntry> _history = new();
     private const int MaxHistoryMessages = 50;
@@ -42,54 +46,33 @@ public sealed class AIChatService : IDisposable
     public IReadOnlyList<AIFunction> ToolFunctions { get; set; }
 
     /// <summary>
-    /// Optional system message prepended to the conversation.
+    /// System message — refreshed before each conversation turn with current metadata.
     /// </summary>
     public string SystemMessage { get; set; }
 
-    public AIChatService(IOptions<AIOptions> optionsAccessor, ILogger<AIChatService> logger)
+    public AIChatService(
+        IOptions<AIOptions> optionsAccessor,
+        ILogger<AIChatService> logger,
+        TornadoApiProvider apiProvider,
+        SchemaDiscoveryService discoveryService)
     {
         _options = optionsAccessor?.Value ?? new AIOptions();
         _logger = logger;
-    }
-
-    private void EnsureInitialized()
-    {
-        if (_initialized) return;
-        _initLock.Wait();
-        try
-        {
-            if (_initialized) return;
-
-            var providerKeys = new List<ProviderAuthentication>();
-            foreach (var (providerId, apiKey) in _options.ApiKeys)
-            {
-                if (string.IsNullOrWhiteSpace(apiKey)) continue;
-                var provider = MapProvider(providerId);
-                if (provider != null)
-                    providerKeys.Add(new ProviderAuthentication(provider.Value, apiKey));
-            }
-
-            if (providerKeys.Count == 0)
-                throw new InvalidOperationException(
-                    "No API keys configured. Add at least one provider key to AI:ApiKeys in appsettings.json.");
-
-            _api = new TornadoApi(providerKeys);
-            _initialized = true;
-            _logger.LogInformation("[TornadoInit] Initialized with {Count} providers", providerKeys.Count);
-        }
-        finally
-        {
-            _initLock.Release();
-        }
+        _apiProvider = apiProvider ?? throw new ArgumentNullException(nameof(apiProvider));
+        _discoveryService = discoveryService ?? throw new ArgumentNullException(nameof(discoveryService));
     }
 
     public async Task<string> AskAsync(string prompt, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        EnsureInitialized();
+
+        var api = _apiProvider.GetApi();
+
+        // Refresh system prompt with current entity metadata
+        RefreshSystemPrompt();
 
         var provider = ResolveProvider(_options.Model);
-        var pipeline = CreateRetryPipeline();
+        var pipeline = CreateRetryPipeline(cancellationToken);
         int toolIterations = 0;
 
         var response = await pipeline.ExecuteAsync(async ct =>
@@ -104,7 +87,7 @@ public sealed class AIChatService : IDisposable
             if (TornadoTools is { Count: > 0 })
                 chatRequest.Tools = TornadoTools.ToList();
 
-            var conversation = _api.Chat.CreateConversation(chatRequest);
+            var conversation = api.Chat.CreateConversation(chatRequest);
 
             // System prompt
             if (!string.IsNullOrWhiteSpace(SystemMessage))
@@ -145,7 +128,7 @@ public sealed class AIChatService : IDisposable
                         _logger.LogInformation("[ToolLoop] {Name} -> {ResultLen} chars", fc.Name, result.Length);
                         fc.Result = new FunctionResult(fc, result);
                     }
-                }, cancellationToken);
+                }, ct);
 
                 // Check if the response still contains unresolved tool calls
                 hasToolCalls = richResponse?.Blocks?.Any(b =>
@@ -210,6 +193,34 @@ public sealed class AIChatService : IDisposable
     /// </summary>
     public void ClearHistory() => _history.Clear();
 
+    /// <summary>
+    /// Refreshes the system prompt with current runtime entity metadata.
+    /// </summary>
+    private void RefreshSystemPrompt()
+    {
+        try
+        {
+            var runtimeTypes = XafDynamicAssemblies.Module.BusinessObjects.XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes;
+            var runtimeTypeNames = new HashSet<string>(runtimeTypes.Select(t => t.Name));
+
+            // Build summary list — we don't have DB access here so use what we can infer
+            // from the live runtime types. The tools themselves have full DB access.
+            var summaries = runtimeTypes.Select(t => new CustomClassSummary
+            {
+                ClassName = t.Name,
+                FieldCount = t.GetProperties().Count(p => p.DeclaringType == t),
+                Status = BusinessObjects.CustomClassStatus.Runtime,
+                IsDeployed = true
+            }).ToList();
+
+            SystemMessage = _discoveryService.GenerateSystemPrompt(summaries);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[RefreshSystemPrompt] Failed to refresh, keeping existing prompt");
+        }
+    }
+
     private async Task<string> ExecuteToolAsync(string toolName, string argumentsJson)
     {
         if (ToolFunctions == null) return "Error: No tools registered.";
@@ -233,7 +244,10 @@ public sealed class AIChatService : IDisposable
         }
     }
 
-    private ResiliencePipeline CreateRetryPipeline()
+    /// <summary>
+    /// Creates a resilience pipeline with retry (excluding user cancellations) and timeout.
+    /// </summary>
+    private ResiliencePipeline CreateRetryPipeline(CancellationToken userCancellationToken)
     {
         return new ResiliencePipelineBuilder()
             .AddRetry(new RetryStrategyOptions
@@ -244,7 +258,13 @@ public sealed class AIChatService : IDisposable
                 UseJitter = true,
                 ShouldHandle = new PredicateBuilder().Handle<Exception>(ex =>
                 {
+                    // Do not retry when the user explicitly cancelled
+                    if (ex is OperationCanceledException oce && userCancellationToken.IsCancellationRequested)
+                        return false;
+
+                    // Retry timeouts (TaskCanceledException with no user cancellation)
                     if (ex is TaskCanceledException or OperationCanceledException) return true;
+
                     if (ex is HttpRequestException httpEx)
                     {
                         var status = (int)(httpEx.StatusCode ?? 0);
@@ -260,6 +280,7 @@ public sealed class AIChatService : IDisposable
                     return ValueTask.CompletedTask;
                 }
             })
+            .AddTimeout(TimeSpan.FromSeconds(_options.TimeoutSeconds))
             .Build();
     }
 
@@ -287,10 +308,7 @@ public sealed class AIChatService : IDisposable
         _ => null
     };
 
-    public void Dispose()
-    {
-        _initLock.Dispose();
-    }
+    public void Dispose() { }
 
     private sealed record ChatMessageEntry(string Role, string Content);
 }

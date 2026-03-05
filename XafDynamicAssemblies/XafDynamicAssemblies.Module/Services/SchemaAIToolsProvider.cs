@@ -93,6 +93,14 @@ public sealed class SchemaAIToolsProvider
         return new ScopedObjectSpace(os, scope);
     }
 
+    private ScopedObjectSpace CreateObjectSpaceForType(Type type)
+    {
+        var scope = _serviceProvider.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<INonSecuredObjectSpaceFactory>();
+        var os = factory.CreateNonSecuredObjectSpace(type);
+        return new ScopedObjectSpace(os, scope);
+    }
+
     // ==========================================================================
     // READ TOOLS
     // ==========================================================================
@@ -662,7 +670,7 @@ public sealed class SchemaAIToolsProvider
             if (roleType == null)
                 return "Security module is not configured in this application. Role management is not available.";
 
-            using var scope = _serviceProvider.CreateScope();
+            var scope = _serviceProvider.CreateScope();
             IObjectSpace os;
             try
             {
@@ -671,10 +679,11 @@ public sealed class SchemaAIToolsProvider
             }
             catch
             {
+                scope.Dispose();
                 return "Security module is not configured or INonSecuredObjectSpaceFactory is not available for role types.";
             }
 
-            using (os)
+            using (new ScopedObjectSpace(os, scope))
             {
                 var roles = os.GetObjects(roleType).Cast<object>().ToList();
 
@@ -767,9 +776,8 @@ public sealed class SchemaAIToolsProvider
                 if (operationsEnum != null) break;
             }
 
-            using var scope = _serviceProvider.CreateScope();
-            var factory = scope.ServiceProvider.GetRequiredService<INonSecuredObjectSpaceFactory>();
-            using var os = factory.CreateNonSecuredObjectSpace(roleType);
+            using var scopedOs = CreateObjectSpaceForType(roleType);
+            var os = scopedOs.Os;
 
             // Find the role
             dynamic role = os.GetObjects(roleType).Cast<object>()
