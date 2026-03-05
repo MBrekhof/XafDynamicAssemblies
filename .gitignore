@@ -39,8 +39,8 @@ Thumbs.db
 tests/debug_*.png
 tests/test-results/
 
-# Sensitive config — API keys go in user-secrets or environment variables
-# appsettings.Development.json is tracked (non-secret dev config only)
+# Sensitive config — API keys go here
+appsettings.Development.json
 
 # Temporary files
 run-server-log.bat
