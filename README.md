@@ -68,19 +68,33 @@ dotnet run --project XafDynamicAssemblies/XafDynamicAssemblies.Blazor.Server \
 
 Open https://localhost:5001 in your browser.
 
+### Process Restart
+
+Deploying schema changes requires a full process restart — XAF's `TypesInfo` and application model are process-static singletons that cannot be reset. The app exits with **code 42** after each deploy, and something external must relaunch it:
+
+| Hosting | Restart mechanism |
+|---------|-------------------|
+| Local dev | `run-server.bat` / `run-server.sh` — loops on exit code 42 |
+| IIS | ANCM out-of-process hosting — auto-restarts Kestrel on any exit |
+| Docker / systemd | `restart: unless-stopped` or `Restart=on-failure` |
+
+**Do not use `dotnet run` directly** — it will exit after deploy and not come back.
+
 ### IIS Deployment
 
-For IIS hosting, the included `web.config` uses **out-of-process hosting**. The ASP.NET Core Module (ANCM) automatically restarts the Kestrel process when the app exits — this handles the Deploy restart (exit code 42) without needing `run-server.bat`.
+The included `web.config` uses **out-of-process hosting**. ANCM runs Kestrel as a child process and automatically restarts it when the app exits — this handles exit code 42 without a wrapper script.
 
 Key settings:
-- `hostingModel="OutOfProcess"` — ANCM restarts Kestrel on any exit, replacing the wrapper script
-- `startupTimeLimit="120"` — allows time for Roslyn compilation on cold start
+- `hostingModel="OutOfProcess"` — **required**. In-process hosting runs inside `w3wp.exe`, and `Environment.Exit(42)` would crash the worker process instead of triggering a clean restart.
+- `startupTimeLimit="120"` — allows time for Roslyn compilation on cold start (default 30s is too short for large schemas)
 
 To deploy:
 1. `dotnet publish -c Release` the Blazor.Server project
 2. Create an IIS site pointing to the publish folder
 3. Ensure the app pool uses **No Managed Code** (.NET CLR version)
 4. The `web.config` in the publish output handles the rest
+
+For internals on the restart mechanism, see [UNDER_THE_HOOD.md — Hot-Load and Process Restart](UNDER_THE_HOOD.md#hot-load-and-process-restart).
 
 ## Usage
 

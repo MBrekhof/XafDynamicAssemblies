@@ -294,6 +294,24 @@ if %ERRORLEVEL% EQU 42 (
 
 Exit code 42 means "restart requested." Any other exit code breaks the loop.
 
+### Hosting Options for Restart
+
+The restart mechanism needs something external to catch exit code 42 and relaunch the process. There are three supported hosting modes:
+
+| Mode | How restart works | Best for |
+|------|-------------------|----------|
+| `run-server.bat` / `.sh` | Wrapper script loops on exit code 42 | Local development, Docker |
+| IIS (out-of-process) | ASP.NET Core Module (ANCM) auto-restarts Kestrel on any exit | Production Windows servers |
+| systemd / Docker | `Restart=on-failure` or `restart: unless-stopped` | Production Linux servers |
+
+**IIS out-of-process** is the simplest production option on Windows. The included `web.config` configures ANCM with `hostingModel="OutOfProcess"`, which means ANCM runs Kestrel as a child process. When the app calls `Environment.Exit(42)`, ANCM sees the process exit and immediately starts a new one — no wrapper script needed.
+
+Key `web.config` settings:
+- `hostingModel="OutOfProcess"` — ANCM manages the Kestrel process lifecycle. On any exit (including exit code 42), ANCM restarts it automatically.
+- `startupTimeLimit="120"` — gives Roslyn 2 minutes to compile all runtime entities on cold start. The default 30 seconds is too short for large schemas.
+
+**In-process hosting will not work.** With `hostingModel="InProcess"`, the app runs inside the IIS worker process (`w3wp.exe`). Calling `Environment.Exit(42)` would kill `w3wp.exe` itself, and IIS would treat that as a crash rather than a clean restart. Out-of-process is required.
+
 ### Why Not In-Process Restart?
 
 We tried. XAF has two process-static caches that cannot be reset:
