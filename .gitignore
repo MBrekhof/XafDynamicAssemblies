@@ -39,6 +39,9 @@ Thumbs.db
 tests/debug_*.png
 tests/test-results/
 
+# Sensitive config
+appsettings.Development.json
+
 # Temporary files
 run-server-log.bat
 second.png
