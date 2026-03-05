@@ -67,6 +67,20 @@ dotnet run --project XafDynamicAssemblies/XafDynamicAssemblies.Blazor.Server \
 
 Open https://localhost:5001 in your browser.
 
+### IIS Deployment
+
+For IIS hosting, the included `web.config` uses **out-of-process hosting**. The ASP.NET Core Module (ANCM) automatically restarts the Kestrel process when the app exits — this handles the Deploy restart (exit code 42) without needing `run-server.bat`.
+
+Key settings:
+- `hostingModel="OutOfProcess"` — ANCM restarts Kestrel on any exit, replacing the wrapper script
+- `startupTimeLimit="120"` — allows time for Roslyn compilation on cold start
+
+To deploy:
+1. `dotnet publish -c Release` the Blazor.Server project
+2. Create an IIS site pointing to the publish folder
+3. Ensure the app pool uses **No Managed Code** (.NET CLR version)
+4. The `web.config` in the publish output handles the rest
+
 ## Usage
 
 ### Creating a Runtime Entity
