@@ -36,7 +36,7 @@ The entire cycle takes seconds. No developer intervention required.
 | Framework | DevExpress XAF 25.2, EF Core 8 |
 | Compilation | Roslyn (Microsoft.CodeAnalysis.CSharp 4.10) |
 | Database | PostgreSQL 17 (via Npgsql) |
-| UI | Blazor Server (primary), WinForms (secondary) |
+| UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
 | Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
 | Testing | Playwright (Python) + pytest, 123 E2E tests |
@@ -217,8 +217,6 @@ XafDynamicAssemblies/
 │   ├── Startup.cs                        # DI, XAF, SignalR wiring
 │   ├── Services/RestartService.cs        # Restart request tracking
 │   └── Hubs/SchemaUpdateHub.cs           # Client notifications
-│
-├── XafDynamicAssemblies.Win/             # WinForms host (Windows-only)
 │
 ├── tests/                                # Playwright E2E tests (Python)
 │   ├── conftest.py                       # Browser/page fixtures

@@ -30,7 +30,7 @@ dotnet build XafDynamicAssemblies.slnx -c EasyTest
 - **Roslyn** (`Microsoft.CodeAnalysis.CSharp` 4.10) for runtime compilation
 - **PostgreSQL 17** via Docker: `localhost:5434`, db `XafDynamicAssemblies`, user/pass `xafdynamic`
 - **EF Core provider:** `Npgsql.EntityFrameworkCore.PostgreSQL` 8.0.11
-- **Blazor Server** (primary UI) + WinForms (secondary)
+- **Blazor Server** (UI)
 - **Docker:** `docker compose up -d` starts PostgreSQL + Python utility container
 
 ## Architecture
@@ -47,7 +47,6 @@ XafDynamicAssemblies.Blazor.Server/   # Blazor Server host
   Startup.cs                          # DI, XAF builder, EF Core provider config
   BlazorApplication.cs                # XAF BlazorApplication with DB version mismatch handling
 
-XafDynamicAssemblies.Win/             # WinForms host (Windows-only, net8.0-windows)
 ```
 
 ### Core Pattern: Dynamic Entity System
