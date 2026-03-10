@@ -61,5 +61,5 @@ Instead of free-form C# controllers, a constrained action builder covering 80% o
 ### Links
 - cs-script: https://github.com/oleg-shilo/cs-script
 - SharpScript: https://sharpscript.net/
-- BlazorMonaco: https://github.com/nicknow/BlazorMonaco
+- BlazorMonaco: [https://github.com/nicknow/BlazorMonaco](https://github.com/Microsoft/monaco-editor)
 - DevExpress Monaco roadmap: https://community.devexpress.com/Blogs/winforms/archive/2026/02/24/winforms-june-2026-roadmap-v26-1.aspx
