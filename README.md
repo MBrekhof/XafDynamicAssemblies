@@ -1,5 +1,7 @@
 # XafDynamicAssemblies
 
+![Architecture Overview](docs/architecture-overview.png)
+
 AI-powered dynamic entity system for [DevExpress XAF](https://www.devexpress.com/products/net/application_framework/). Create new business object types, properties, and relationships **at runtime** — no recompilation, no redeployment. Uses Roslyn for in-process C# compilation and `AssemblyLoadContext` for hot-loading.
 
 **This is not EAV.** The system generates real CLR types backed by real SQL columns and foreign key constraints. The result is full XAF framework support — list views, detail views, validation, reporting — for entities that never existed at compile time.
