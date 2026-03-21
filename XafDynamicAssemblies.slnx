@@ -6,5 +6,4 @@
   </Configurations>
   <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Blazor.Server/XafDynamicAssemblies.Blazor.Server.csproj" />
   <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Module/XafDynamicAssemblies.Module.csproj" />
-  <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Win/XafDynamicAssemblies.Win.csproj" />
 </Solution>
