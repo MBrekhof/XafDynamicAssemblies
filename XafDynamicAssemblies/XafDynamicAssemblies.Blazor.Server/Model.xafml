@@ -1,10 +1,23 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Application>
-  <Options UIType="TabbedMDI"
-         FormStyle="Ribbon"
-         RestoreTabbedMdiLayout="True"
-         ShowTabImage="True"
-	 VirtualScrollingEnabled="True">
-  </Options>
-  <NavigationItems NavigationStyle="Accordion" />
+  <NavigationItems NavigationStyle="Accordion">
+    <Items>
+      <Item Id="Default">
+        <Items>
+          <Item Id="AIChat_ListView" Removed="True" />
+        </Items>
+      </Item>
+      <Item Id="Schema Management">
+        <Items>
+          <Item Id="AIChat_ListView" ViewId="AIChat_ListView" ObjectKey="" IsNewNode="True" />
+        </Items>
+      </Item>
+    </Items>
+  </NavigationItems>
+  <Options UIType="TabbedMDI" FormStyle="Ribbon" RestoreTabbedMdiLayout="True" ShowTabImage="True" VirtualScrollingEnabled="True" />
+  <SchemaModules>
+    <SchemaModule Name="SchedulerBlazorModule" Version="25.2.3.0" IsNewNode="True" />
+    <SchemaModule Name="SchedulerModuleBase" Version="25.2.3.0" IsNewNode="True" />
+    <SchemaModule Name="SystemModule" Version="25.2.3.0" IsNewNode="True" />
+  </SchemaModules>
 </Application>
