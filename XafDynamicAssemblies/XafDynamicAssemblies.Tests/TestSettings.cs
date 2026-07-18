@@ -8,7 +8,8 @@ public static class TestSettings
         Environment.GetEnvironmentVariable("BASE_URL") ?? "https://localhost:5001";
 
     public static bool Headless =>
-        bool.TryParse(Environment.GetEnvironmentVariable("HEADLESS"), out var h) ? h : true;
+        (Environment.GetEnvironmentVariable("HEADLESS") ?? "true")
+            .Equals("true", StringComparison.OrdinalIgnoreCase);
 
     public static int SlowMo =>
         int.TryParse(Environment.GetEnvironmentVariable("SLOW_MO"), out var s) ? s : 0;
