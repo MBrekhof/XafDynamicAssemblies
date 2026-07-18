@@ -85,6 +85,23 @@ public static class DatabaseHelper
         insertCmd.ExecuteNonQuery();
     }
 
+    /// <summary>
+    /// Set the IsApiExposed flag on a CustomClass directly via SQL, ported from the Python
+    /// test suite's set_api_exposed_via_db() (tests/tests/test_phase10_web_api.py).
+    /// </summary>
+    public static void SetApiExposedViaDb(string className, bool isExposed)
+    {
+        using var conn = GetConnection();
+        using var cmd = new NpgsqlCommand(
+            "UPDATE \"CustomClasses\" SET \"IsApiExposed\" = @exposed WHERE \"ClassName\" = @name " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
+        cmd.Parameters.AddWithValue("exposed", isExposed);
+        cmd.Parameters.AddWithValue("name", className);
+        var rows = cmd.ExecuteNonQuery();
+        if (rows == 0)
+            throw new Exception($"No CustomClass found with name '{className}'");
+    }
+
     public static bool TableExists(string tableName)
     {
         using var conn = GetConnection();
