@@ -148,7 +148,7 @@ public class Phase08_PerformanceTests : IAsyncLifetime
         Assert.True(await lv.HasRowWithTextAsync("PerfRecord1"), "PerfRecord1 should exist");
     }
 
-    // --- TestConcurrentPageLoads: system handles page loads from multiple browser contexts ---
+    // ponytail: Python's TestConcurrentPageLoads never opens a second context either — ported as-is, not "fixed".
 
     /// <summary>Open a runtime entity ListView and verify it renders without errors.</summary>
     [Fact]

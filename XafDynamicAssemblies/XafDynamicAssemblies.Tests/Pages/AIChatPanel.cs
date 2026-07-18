@@ -18,11 +18,14 @@ public class AIChatPanel : BasePage
     // see task-18-report.md for the verification trail.
     private const string ChatContainer = ".copilot-chat-container";
     private const string MessageInput = ".copilot-chat textarea";
-    private const string SendButton = ".copilot-chat .dxai-chat-button-send, .copilot-chat button[aria-label='Send']";
+    // ponytail: SendButton/MessageContent/LoadingIndicator selectors removed — task-18-report.md
+    // confirmed all three never matched anything in the live DxAIChat DOM (100% dead, not just the
+    // dxai-chat-* halves). Code always took the fallback path anyway: Enter-key send
+    // (SendMessageAsync/ClickSuggestionAsync), whole-message-div InnerText/InnerHTML
+    // (GetLastResponseAsync/GetLastResponseHtmlAsync/GetAllResponsesAsync), no wait-for-hidden
+    // (WaitForResponseAsync). Kept only that working behavior.
     private const string AllMessages = ".copilot-chat .dxbl-chatui-message";
     private const string AssistantMessages = ".copilot-chat .dxbl-chatui-message-assistant";
-    private const string MessageContent = ".dxai-chat-message-content";
-    private const string LoadingIndicator = ".copilot-chat .dxai-chat-message-typing, .copilot-chat .dxai-chat-typing-indicator";
 
     // Public: referenced directly by test_phase11_ai_chat_mocked.py (AIChatPanel.SUGGESTION_BUTTON)
     // for a locator built outside the page object — kept public here for the same reason.
@@ -71,43 +74,17 @@ public class AIChatPanel : BasePage
         await input.ClickAsync();
         await input.FillAsync(text);
         await Page.WaitForTimeoutAsync(200);
-
-        // Try clicking the send button; fall back to pressing Enter
-        var sendBtn = Page.Locator(SendButton);
-        if (await sendBtn.CountAsync() > 0 && await sendBtn.First.IsVisibleAsync())
-            await sendBtn.First.ClickAsync();
-        else
-            await input.PressAsync("Enter");
+        await input.PressAsync("Enter");
 
         await Page.WaitForTimeoutAsync(500);
         await WaitForResponseAsync(timeout);
     }
 
-    /// <summary>
-    /// Wait for the AI to finish responding: an assistant message appears, then the
-    /// loading/typing indicator (if any) disappears.
-    /// </summary>
+    /// <summary>Wait for the AI to finish responding: an assistant message appears.</summary>
     public async Task WaitForResponseAsync(int timeout = 30_000)
     {
         await Page.Locator(AssistantMessages).First
             .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = timeout });
-
-        try
-        {
-            var loading = Page.Locator(LoadingIndicator);
-            if (await loading.CountAsync() > 0 && await loading.First.IsVisibleAsync())
-            {
-                await loading.First.WaitForAsync(new()
-                {
-                    State = WaitForSelectorState.Hidden,
-                    Timeout = timeout
-                });
-            }
-        }
-        catch
-        {
-            // Indicator may have already disappeared
-        }
 
         await Page.WaitForTimeoutAsync(500);
     }
@@ -118,11 +95,7 @@ public class AIChatPanel : BasePage
         var messages = Page.Locator(AssistantMessages);
         var count = await messages.CountAsync();
         if (count == 0) return "";
-        var last = messages.Nth(count - 1);
-        var content = last.Locator(MessageContent);
-        if (await content.CountAsync() > 0)
-            return await content.First.InnerTextAsync();
-        return await last.InnerTextAsync();
+        return await messages.Nth(count - 1).InnerTextAsync();
     }
 
     /// <summary>Get the inner HTML of the last assistant message (for markdown verification).</summary>
@@ -131,11 +104,7 @@ public class AIChatPanel : BasePage
         var messages = Page.Locator(AssistantMessages);
         var count = await messages.CountAsync();
         if (count == 0) return "";
-        var last = messages.Nth(count - 1);
-        var content = last.Locator(MessageContent);
-        if (await content.CountAsync() > 0)
-            return await content.First.InnerHTMLAsync();
-        return await last.InnerHTMLAsync();
+        return await messages.Nth(count - 1).InnerHTMLAsync();
     }
 
     /// <summary>Get text content of all assistant messages.</summary>
@@ -145,14 +114,7 @@ public class AIChatPanel : BasePage
         var count = await messages.CountAsync();
         var result = new List<string>();
         for (var i = 0; i < count; i++)
-        {
-            var msg = messages.Nth(i);
-            var content = msg.Locator(MessageContent);
-            if (await content.CountAsync() > 0)
-                result.Add(await content.First.InnerTextAsync());
-            else
-                result.Add(await msg.InnerTextAsync());
-        }
+            result.Add(await messages.Nth(i).InnerTextAsync());
         return result;
     }
 
@@ -179,12 +141,7 @@ public class AIChatPanel : BasePage
                 // Clicking a suggestion only populates the message input (verified against
                 // the live DxAIChat DOM) — it does not auto-submit. Submit explicitly, same
                 // mechanism as SendMessageAsync.
-                var input = Page.Locator(MessageInput).First;
-                var sendBtn = Page.Locator(SendButton);
-                if (await sendBtn.CountAsync() > 0 && await sendBtn.First.IsVisibleAsync())
-                    await sendBtn.First.ClickAsync();
-                else
-                    await input.PressAsync("Enter");
+                await Page.Locator(MessageInput).First.PressAsync("Enter");
                 return;
             }
         }

@@ -455,6 +455,7 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
         Assert.Contains("class EscGrad", source);
         Assert.Contains("BaseObject", source);
 
+        // ponytail: Python's first assertion here was dead code (precedence bug made it (A or B) if C else False, strictly weaker than the check below) — intentionally not ported.
         // Finding 4: ToolTip with quotes should be escaped in string literal (backslash-escaped)
         Assert.True(source!.Contains("\\\"quotes\\\""),
             $"Quotes should be backslash-escaped in generated source. Source:\n{source}");

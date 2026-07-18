@@ -87,8 +87,8 @@
 ## How to Verify
 ```bash
 dotnet build XafDynamicAssemblies.slnx
-run-server.bat
-docker exec xaf-dynamic-python bash -c "cd /workspace && python3 -m pytest tests/tests/ -v --timeout=180"
+run-server-mock.bat
+dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
 ## Known Issues

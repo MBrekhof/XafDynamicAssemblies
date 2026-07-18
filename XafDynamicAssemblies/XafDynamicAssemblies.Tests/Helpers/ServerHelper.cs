@@ -21,7 +21,7 @@ public static class ServerHelper
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                var response = await Http.GetAsync(TestSettings.BaseUrl, cts.Token);
+                using var response = await Http.GetAsync(TestSettings.BaseUrl, cts.Token);
                 if ((int)response.StatusCode < 500)
                     return;
             }
