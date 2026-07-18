@@ -227,7 +227,7 @@ XafDynamicAssemblies/
 │   │   ├── ListViewPage.cs               # Grid interactions
 │   │   └── DetailViewPage.cs             # Form interactions
 │   ├── MockLlm/                          # In-process mock LLM server (port 5555)
-│   └── Tests/                            # 11 phases, 133 tests + 5 mock-server self-tests
+│   └── Tests/                            # 11 phases, 143 tests + 5 mock-server self-tests
 │       ├── Phase01_MetadataCrudTests.cs
 │       ├── Phase02_RuntimeEntityTests.cs
 │       ├── Phase03_ValidationTests.cs

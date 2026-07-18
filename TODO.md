@@ -5,7 +5,7 @@
 #### TEST-001: Migrate Playwright tests from Python to .NET (ID: 1048)
 
 Port the 104 Playwright tests (12 files, 10 phases), page objects, and mock LLM harness from
-Python/pytest to C# `Microsoft.Playwright` + NUnit, run via `dotnet test`.
+Python/pytest to C# `Microsoft.Playwright` + xUnit, run via `dotnet test`.
 
 - Plan: `docs/plans/2026-03-21-playwright-dotnet-migration.md` (21 tasks: 1-7 infrastructure,
   8-19 port test phases, 20-21 cleanup + full verification)
