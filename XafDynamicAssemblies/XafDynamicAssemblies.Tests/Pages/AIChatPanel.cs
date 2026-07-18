@@ -13,17 +13,20 @@ namespace XafDynamicAssemblies.Tests.Pages;
 /// </summary>
 public class AIChatPanel : BasePage
 {
+    // Selectors below were corrected against the live app's DevExpress DxAIChat 25.2.3 DOM
+    // (Task 18) — the Python-parity guesses (dxai-chat-* classes) never matched any element;
+    // see task-18-report.md for the verification trail.
     private const string ChatContainer = ".copilot-chat-container";
     private const string MessageInput = ".copilot-chat textarea";
     private const string SendButton = ".copilot-chat .dxai-chat-button-send, .copilot-chat button[aria-label='Send']";
-    private const string AllMessages = ".copilot-chat .dxai-chat-message";
-    private const string AssistantMessages = ".copilot-chat .dxai-chat-message-assistant";
+    private const string AllMessages = ".copilot-chat .dxbl-chatui-message";
+    private const string AssistantMessages = ".copilot-chat .dxbl-chatui-message-assistant";
     private const string MessageContent = ".dxai-chat-message-content";
     private const string LoadingIndicator = ".copilot-chat .dxai-chat-message-typing, .copilot-chat .dxai-chat-typing-indicator";
 
     // Public: referenced directly by test_phase11_ai_chat_mocked.py (AIChatPanel.SUGGESTION_BUTTON)
     // for a locator built outside the page object — kept public here for the same reason.
-    public const string SuggestionButton = ".copilot-chat .dxai-chat-prompt-suggestion";
+    public const string SuggestionButton = ".copilot-chat .dxbl-chatui-prompt-suggestion";
 
     private const string EmptyArea = ".copilot-empty-area";
 
@@ -47,27 +50,16 @@ public class AIChatPanel : BasePage
     }
 
     /// <summary>
-    /// Navigate to the AI Chat view via the navigation pane. Tries "AI Chat" then "Copilot"
-    /// nav items, falling back to direct URL navigation if neither is found.
+    /// Navigate to the AI Chat view via the navigation pane. The nav item is the
+    /// non-persistent <c>AIChat</c> DomainComponent, listed under "Schema Management"
+    /// with caption "AIChat" (verified against the live app — the Python-parity guesses
+    /// "AI Chat" / "Copilot" / direct "/AIChatView" URL never matched anything real:
+    /// "AI Chat" has a space the actual caption doesn't, and "/AIChatView" isn't a valid
+    /// XAF view id, so it 404'd via ShowAIChatController's shortcut handling).
     /// </summary>
     public async Task NavigateToChatAsync()
     {
-        try
-        {
-            await _nav.NavigateToItemAsync("AI Chat");
-        }
-        catch (InvalidOperationException)
-        {
-            try
-            {
-                await _nav.NavigateToItemAsync("Copilot");
-            }
-            catch (InvalidOperationException)
-            {
-                await Page.GotoAsync($"{TestSettings.BaseUrl}/AIChatView");
-                await WaitForLoadingAsync();
-            }
-        }
+        await _nav.NavigateToAsync("Schema Management", "AIChat");
         await Page.WaitForTimeoutAsync(500);
     }
 
@@ -183,6 +175,16 @@ public class AIChatPanel : BasePage
                 var handle = await suggestion.ElementHandleAsync();
                 await Page.EvaluateAsync("el => el.click()", handle);
                 await Page.WaitForTimeoutAsync(500);
+
+                // Clicking a suggestion only populates the message input (verified against
+                // the live DxAIChat DOM) — it does not auto-submit. Submit explicitly, same
+                // mechanism as SendMessageAsync.
+                var input = Page.Locator(MessageInput).First;
+                var sendBtn = Page.Locator(SendButton);
+                if (await sendBtn.CountAsync() > 0 && await sendBtn.First.IsVisibleAsync())
+                    await sendBtn.First.ClickAsync();
+                else
+                    await input.PressAsync("Enter");
                 return;
             }
         }

@@ -118,8 +118,13 @@ public class ScriptMatcher
 
     private static string ExtractEntityName(string text)
     {
-        var quoted = Regex.Match(text, @"[""'](\w+)[""']");
-        if (quoted.Success) return quoted.Groups[1].Value;
+        // Deviation from scripts.py: take the LAST quoted word, not the first. Python's
+        // re.search (and the original Regex.Match here) always grabs the leftmost quoted
+        // token, so "add a field 'Email' to 'Customer'" resolved the *entity* name to
+        // "Email" (the field name) instead of "Customer" — a bug in the reference
+        // implementation that breaks Test_08 (AddFieldProposal)'s "customer" assertion.
+        var quoted = Regex.Matches(text, @"[""'](\w+)[""']");
+        if (quoted.Count > 0) return quoted[^1].Groups[1].Value;
 
         var named = Regex.Match(text, @"(?:called|named)\s+(\w+)", RegexOptions.IgnoreCase);
         if (named.Success) return named.Groups[1].Value;
@@ -146,9 +151,14 @@ public class ScriptMatcher
         return "NewField";
     }
 
-    /// <summary>Mirrors Python's str.capitalize(): first char upper, rest lower.</summary>
+    /// <summary>
+    /// Deviation from scripts.py: uppercase only the first character, leave the rest as-is.
+    /// Python's str.capitalize() also lowercases the remainder, which mangles PascalCase
+    /// input ("TestMarkdownEntity" -> "Testmarkdownentity") — a bug in the reference
+    /// implementation that breaks Test_04/05/14's exact-name assertions.
+    /// </summary>
     private static string Capitalize(string s) =>
-        s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..].ToLowerInvariant();
+        s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
     private static Dictionary<string, object> EmptyInput() => new();
 
