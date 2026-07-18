@@ -31,7 +31,7 @@ dotnet build XafDynamicAssemblies.slnx -c EasyTest
 - **PostgreSQL 17** via Docker: `localhost:5434`, db `XafDynamicAssemblies`, user/pass `xafdynamic`
 - **EF Core provider:** `Npgsql.EntityFrameworkCore.PostgreSQL` 8.0.11
 - **Blazor Server** (UI)
-- **Docker:** `docker compose up -d` starts PostgreSQL + Python utility container
+- **Docker:** `docker compose up -d` starts PostgreSQL
 
 ## Architecture
 
@@ -97,7 +97,7 @@ Conversational AI interface for creating, modifying, and deleting runtime entiti
 - **Tools:** 10 AI functions (list/describe/create/modify/delete entities, validate, pending changes, roles)
 - **System prompt:** Two-tier — lightweight entity list + on-demand `describe_entity` for full details
 - **Config:** `AI` section in `appsettings.json` (API keys in `appsettings.Development.json`)
-- **Testing:** Mocked (mock LLM server, deterministic) + Live (real AI, `@pytest.mark.live_ai`)
+- **Testing:** Mocked (in-process mock LLM server on port 5555, deterministic) + Live (real AI, `[Trait("Category","LiveAI")]`, opt-in via `AI_TEST_API_KEY`)
 
 ### Graduation Path
 
@@ -140,6 +140,6 @@ System.Byte[]   → bytea
 - AI Config: `Module/Services/AIOptions.cs`, `AIServiceCollectionExtensions.cs`
 - AI Discovery: `Module/Services/SchemaDiscoveryService.cs`
 - AI UI: `Blazor.Server/Editors/AIChatViewItem/AIChat.razor`
-- AI Tests: `tests/tests/test_phase11_ai_chat_mocked.py`, `test_phase11_ai_chat_live.py`
-- Mock LLM: `tests/mock_llm/server.py`, `tests/mock_llm/scripts.py`
-- Tests: `tests/` (Playwright Python, page objects in `tests/pages/`)
+- AI Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/Tests/Phase11_AIChatMockedTests.cs`, `Phase11_AIChatLiveTests.cs`
+- Mock LLM: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/MockLlm/MockLlmServer.cs`, `ScriptMatcher.cs`
+- Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (Playwright .NET/xUnit, page objects in `Pages/`)

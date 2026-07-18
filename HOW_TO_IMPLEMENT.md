@@ -1402,6 +1402,8 @@ Always use `"double quotes"` around table and column names in your DDL.
 
 Automated testing of XAF Blazor applications requires Playwright and some XAF-specific knowledge.
 
+> This project's own test suite now uses **Playwright for .NET + xUnit** (see the repo's `README.md#running-tests`) rather than the Python setup below. The Python approach is still a valid choice for a from-scratch build — the selector cheat sheet and gotchas below apply either way — but the concrete fixture/runner code is Python-specific.
+
 ### Setup
 
 Use Playwright with Python (or Node.js). The project uses a Docker container with Playwright pre-installed:

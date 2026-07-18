@@ -28,7 +28,7 @@ The entire cycle takes seconds. No developer intervention required.
 - **Schema export/import** — download schema definitions as JSON files, upload to restore or migrate between environments
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
-- **123 end-to-end tests** across 10 phases, all passing
+- **143 end-to-end tests** across 11 phases, all passing (.NET/Playwright/xUnit)
 
 ## Tech Stack
 
@@ -41,19 +41,19 @@ The entire cycle takes seconds. No developer intervention required.
 | UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
 | Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
-| Testing | Playwright (Python) + pytest, 123 E2E tests |
-| Infrastructure | Docker Compose (PostgreSQL + test runner) |
+| Testing | Playwright (.NET) + xUnit, 143 E2E tests across 11 phases (+ 5 mock-server self-tests) |
+| Infrastructure | Docker Compose (PostgreSQL) |
 
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL and test runner)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL)
 - [DevExpress Universal Subscription](https://www.devexpress.com/) (XAF 25.2) — NuGet feed must be configured
 
 ## Quick Start
 
 ```bash
-# 1. Start PostgreSQL and the Python test container
+# 1. Start PostgreSQL
 docker compose up -d
 
 # 2. Build the solution
@@ -220,44 +220,51 @@ XafDynamicAssemblies/
 │   ├── Services/RestartService.cs        # Restart request tracking
 │   └── Hubs/SchemaUpdateHub.cs           # Client notifications
 │
-├── tests/                                # Playwright E2E tests (Python)
-│   ├── conftest.py                       # Browser/page fixtures
-│   ├── pages/                            # Page object models
-│   │   ├── navigation_page.py            # XAF accordion nav
-│   │   ├── list_view_page.py             # Grid interactions
-│   │   └── detail_view_page.py           # Form interactions
-│   └── tests/                            # 10 phases, 123 tests
-│       ├── test_phase1_metadata_crud.py
-│       ├── test_phase2_runtime_entities.py
-│       ├── test_phase3_validation.py
-│       ├── test_phase4_hot_load.py
-│       ├── test_phase5_relationships.py
-│       ├── test_phase6_graduation.py
-│       ├── test_phase7_error_handling.py
-│       ├── test_phase8_performance.py
-│       ├── test_phase9_review_fixes.py
-│       ├── test_phase10_web_api.py
-│       ├── test_phase11_ai_chat_mocked.py
-│       └── test_phase11_ai_chat_live.py
+├── XafDynamicAssemblies.Tests/           # Playwright E2E tests (.NET / xUnit)
+│   ├── Fixtures/                         # Browser + mock-LLM fixtures
+│   ├── Pages/                            # Page object models
+│   │   ├── NavigationPage.cs             # XAF accordion nav
+│   │   ├── ListViewPage.cs               # Grid interactions
+│   │   └── DetailViewPage.cs             # Form interactions
+│   ├── MockLlm/                          # In-process mock LLM server (port 5555)
+│   └── Tests/                            # 11 phases, 133 tests + 5 mock-server self-tests
+│       ├── Phase01_MetadataCrudTests.cs
+│       ├── Phase02_RuntimeEntityTests.cs
+│       ├── Phase03_ValidationTests.cs
+│       ├── Phase04_HotLoadTests.cs
+│       ├── Phase05_RelationshipTests.cs
+│       ├── Phase06_GraduationTests.cs
+│       ├── Phase07_ErrorHandlingTests.cs
+│       ├── Phase08_PerformanceTests.cs
+│       ├── Phase09_ReviewFixesTests.cs
+│       ├── Phase10_WebApiTests.cs
+│       ├── Phase11_AIChatMockedTests.cs
+│       └── Phase11_AIChatLiveTests.cs
 │
-├── docker-compose.yml                    # PostgreSQL 17 + Python test runner
-├── Dockerfile.python                     # Playwright test image
-├── run-server.bat                        # Windows restart wrapper
-└── run-server.sh                         # Linux restart wrapper
+├── docker-compose.yml                    # PostgreSQL 17
+├── run-server.bat / run-server.sh        # Windows / Linux restart wrapper
+└── run-server-mock.bat                   # Windows restart wrapper + mock LLM routing
 ```
 
 ## Running Tests
 
-The server must be running via `run-server.bat` / `run-server.sh` (not `dotnet run` directly) because tests trigger deploy+restart cycles.
+The server must be running via `run-server.bat` / `run-server.sh` (not `dotnet run` directly) because tests trigger deploy+restart cycles. Phase 11 mocked AI-chat tests additionally require the server started via **`run-server-mock.bat`** — it routes the app's LLM calls to the in-process mock server on port 5555; without it, Phase 11 fails with generic chat errors rather than a clear "wrong server" message.
 
 ```bash
-# Full regression (123 tests, ~30 minutes)
-docker exec xaf-dynamic-python bash -c \
-  "cd /workspace && python3 -m pytest tests/tests/ -v --timeout=180"
+# Install Playwright browsers (first time only)
+pwsh XafDynamicAssemblies/XafDynamicAssemblies.Tests/bin/Debug/net8.0/playwright.ps1 install chromium
+
+# Full regression — start the server via run-server-mock.bat first, then:
+dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI" -v normal
 
 # Single phase
-docker exec xaf-dynamic-python bash -c \
-  "cd /workspace && python3 -m pytest tests/tests/test_phase4_hot_load.py -v --timeout=180"
+dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "FullyQualifiedName~Phase04" -v normal
+```
+
+Live AI tests are opt-in — they call a real LLM provider and are excluded from the filters above. Set `AI_TEST_API_KEY` and run with `--filter "Category=LiveAI"`:
+
+```bash
+AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category=LiveAI"
 ```
 
 ### Test Phases
@@ -274,16 +281,19 @@ docker exec xaf-dynamic-python bash -c \
 | 8 — Performance | 4 | Bulk 10-class compilation, concurrent page access |
 | 9 — Review Fixes | 19 | Cross-references, required refs, field attributes, graduation escaping |
 | 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
-| 11 — AI Chat | 5+ | Live AI entity creation, modification, ambiguity resolution, multi-turn (requires API key) |
+| 11 — AI Chat (Mocked) | 15 | Chat panel, prompt suggestions, entity/field proposals, roles, multi-turn (requires `run-server-mock.bat`) |
+| 11 — AI Chat (Live) | 5 | Live AI entity creation, modification, ambiguity resolution, multi-turn (opt-in, requires `AI_TEST_API_KEY`) |
+| — Mock LLM Server | 5 | Self-tests for the in-process mock LLM server/script matcher |
 
 ### Test Environment
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BASE_URL` | `https://host.docker.internal:5001` | App URL from inside Docker |
+| `BASE_URL` | `https://localhost:5001` | App URL |
 | `HEADLESS` | `true` | Headless browser mode |
 | `SLOW_MO` | `0` | Slow down for debugging (ms) |
-| `AI_TEST_API_KEY` | (none) | API key for live AI tests (Phase 11); tests skipped if unset |
+| `MOCK_LLM_PORT` | `5555` | Port the mock LLM server listens on (must match `run-server-mock.bat`) |
+| `AI_TEST_API_KEY` | (none) | API key for live AI tests (Phase 11 Live, `Category=LiveAI`); tests skipped if unset |
 
 ## Database
 

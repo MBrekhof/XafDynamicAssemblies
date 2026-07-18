@@ -711,15 +711,17 @@ All validation uses `[RuleFromBoolProperty]` attributes — XAF's declarative va
 
 ## Testing Architecture
 
+Tests are Playwright for .NET + xUnit, in `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (ported from an earlier Python/pytest suite — see `README.md#running-tests` for current commands).
+
 ### Page Object Model
 
 Tests use a Playwright-based Page Object Model tailored to DevExpress XAF Blazor:
 
 ```
-BasePage          — wait_for_loading(), wait_for_view()
-NavigationPage    — navigate_to("Schema Management", "Custom Class")
-ListViewPage      — wait_for_grid(), click_new(), has_row_with_text(), click_delete()
-DetailViewPage    — fill_field("Class Name", "Invoice"), click_save()
+BasePage          — WaitForLoadingAsync(), ClickNewAsync(), ClickSaveAsync(), ClickDeleteAsync()
+NavigationPage    — NavigateToAsync("Schema Management", "Custom Class")
+ListViewPage      — WaitForGridAsync(), HasRowWithTextAsync(), SelectRowWithTextAsync()
+DetailViewPage    — FillFieldAsync("Class Name", "Invoice"), GetFieldValueAsync()
 ```
 
 ### DevExpress Blazor Gotchas
@@ -738,15 +740,13 @@ Each phase creates its test entities, runs assertions, and cleans up in a `TestC
 
 ### Fixture Design
 
-```python
-@pytest.fixture(scope="session")
-def browser():       # One Chromium instance for all tests
+```csharp
+public class BrowserFixture : IAsyncLifetime  // One Chromium instance for the collection
+{
+    public async Task<IPage> NewPageAsync()    // Fresh context+page per test, navigates
+}                                               // to BASE_URL, waits for XAF nav to load
 
-@pytest.fixture(scope="function")
-def context():       # Fresh browser context per test (clean cookies/state)
-
-@pytest.fixture(scope="function")
-def page():          # Navigates to BASE_URL and waits for XAF nav to load
+[CollectionDefinition] class SequentialCollection : ICollectionFixture<BrowserFixture> { }
 ```
 
 ---
