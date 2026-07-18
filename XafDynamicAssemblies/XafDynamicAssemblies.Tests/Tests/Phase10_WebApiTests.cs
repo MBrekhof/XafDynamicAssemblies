@@ -29,7 +29,10 @@ public class Phase10_WebApiTests : IAsyncLifetime
     private static readonly HttpClient Http = new(new HttpClientHandler
     {
         ServerCertificateCustomValidationCallback = (_, _, _, _) => true
-    });
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(15)
+    };
 
     private static string ApiBase => $"{TestSettings.BaseUrl}/api/odata";
 
