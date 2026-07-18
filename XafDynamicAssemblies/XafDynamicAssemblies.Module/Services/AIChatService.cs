@@ -286,6 +286,10 @@ public sealed class AIChatService : IDisposable
 
     private LLmProviders ResolveProvider(string modelId)
     {
+        // ponytail: test-only mock routing — see AIOptions.MockLlmBaseUrlEnvVar.
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(AIOptions.MockLlmBaseUrlEnvVar)))
+            return LLmProviders.Custom;
+
         if (modelId.StartsWith("claude", StringComparison.OrdinalIgnoreCase)) return LLmProviders.Anthropic;
         if (modelId.StartsWith("gpt", StringComparison.OrdinalIgnoreCase)) return LLmProviders.OpenAi;
         if (modelId.StartsWith("o3", StringComparison.OrdinalIgnoreCase)) return LLmProviders.OpenAi;

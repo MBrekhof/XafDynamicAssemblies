@@ -9,6 +9,7 @@ obj/
 [Rr]elease/
 x64/
 x86/
+TestResults/
 
 # Visual Studio
 .vs/
@@ -34,10 +35,6 @@ Thumbs.db
 
 # Logs
 *.log
-
-# Test artifacts
-tests/debug_*.png
-tests/test-results/
 
 # Sensitive config — API keys go here
 appsettings.Development.json

@@ -32,6 +32,19 @@ public sealed class TornadoApiProvider : IDisposable
         {
             if (_initialized) return _api;
 
+            // ponytail: test-only mock routing (see AIOptions.MockLlmBaseUrlEnvVar). The
+            // unauthenticated Uri ctor targets LLmProviders.Custom, which LlmTornado resolves
+            // to "{baseUrl}/v1/chat/completions" (OpenAI wire format) — verified against the
+            // Playwright mock LLM server's /v1/chat/completions handler.
+            var mockBaseUrl = Environment.GetEnvironmentVariable(AIOptions.MockLlmBaseUrlEnvVar);
+            if (!string.IsNullOrWhiteSpace(mockBaseUrl))
+            {
+                _api = new TornadoApi(new Uri(mockBaseUrl));
+                _initialized = true;
+                _logger.LogInformation("[TornadoApiProvider] MOCK mode -> {Url}", mockBaseUrl);
+                return _api;
+            }
+
             var providerKeys = new List<ProviderAuthentication>();
             foreach (var (providerId, apiKey) in _options.ApiKeys)
             {
