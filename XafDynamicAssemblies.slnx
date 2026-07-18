@@ -4,6 +4,11 @@
     <BuildType Name="EasyTest" />
     <BuildType Name="Release" />
   </Configurations>
+  <Folder Name="/XafDynamicAssemblies/">
+    <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Tests/XafDynamicAssemblies.Tests.csproj">
+      <BuildType Solution="EasyTest|*" Project="Debug" />
+    </Project>
+  </Folder>
   <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Blazor.Server/XafDynamicAssemblies.Blazor.Server.csproj" />
   <Project Path="XafDynamicAssemblies/XafDynamicAssemblies.Module/XafDynamicAssemblies.Module.csproj" />
 </Solution>
