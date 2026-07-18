@@ -3,7 +3,7 @@ using XafDynamicAssemblies.Tests.Fixtures;
 namespace XafDynamicAssemblies.Tests.Tests;
 
 [Collection("Sequential")]
-public class SmokeTest : IClassFixture<BrowserFixture>
+public class SmokeTest
 {
     private readonly BrowserFixture _browser;
     public SmokeTest(BrowserFixture browser) => _browser = browser;
