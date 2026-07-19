@@ -78,14 +78,25 @@ both under the Schema Management nav group. No custom editors in v1.
 `Module/Controllers/MetadataActionDispatcherController.cs`, `ViewController<DetailView>`
 (no object-type constraint → considered for every DetailView).
 
+**Implementation amendment (2026-07-19, verified against DX 26.1 sources during Task 2):**
+XAF Blazor resolves toolbar/Ribbon container membership from the Application Model, which is
+generated from CONSTRUCTOR-declared controller actions before any view activates — actions
+created dynamically in `OnActivated` never render (and `Controller.Actions` has no `Remove`,
+so per-activation re-adds would throw on duplicate ids). The dispatcher therefore declares a
+fixed POOL of 10 slot `SimpleAction`s in its constructor (`CustomActionSlot_0..9`,
+PredefinedCategory.Edit) and, per activation, assigns matching metadata rows to slots
+(Caption/ConfirmationMessage/criteria) and hides unused slots via `Active[key] = false`.
+**Ceiling: 10 active actions per target entity type**; overflow is logged and slot
+assignment is deterministic (ordered by Caption, then ID).
+
 OnActivated:
 1. Open a dedicated `IObjectSpace` for `CustomAction` (never the view's — keeps the view's
    object space unmodified). Dispose it on deactivation.
 2. Query: `IsActive && TargetEntity == View.ObjectTypeInfo.Name`. Fresh query per
    activation = live behavior; no caching in v1.
-3. For each row: create `SimpleAction(this, $"CustomAction_{row.ID:N}", PredefinedCategory.Edit)`
-   with Caption and ConfirmationMessage from metadata; subscribe `Execute`; register in
-   `Actions`.
+3. Assign each row (ordered by Caption, then ID) to the next pool slot: set Caption and
+   ConfirmationMessage from metadata; `Execute` handlers are subscribed once in the
+   constructor and route to the assigned row via a per-activation slot→row map.
 4. Parse Criteria once (`CriteriaOperator.Parse` in try/catch). Unparseable → action
    disabled via BoolList reason `"InvalidCriteria"` + `ILogger` warning; never a user-facing
    throw.
