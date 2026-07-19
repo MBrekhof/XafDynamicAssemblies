@@ -40,9 +40,15 @@ dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=
 - Known flake (1st occurrence): Phase11 Test_10_ValidateSchema returned empty chat response
   once in a full-suite run; green in isolated re-run and in all prior regressions.
 
+### ACT-001 shipped (2026-07-19, merged d550fd7)
+- Metadata-driven action builder: live SetField/ShowMessage/OpenView buttons on DetailViews,
+  no restart. Slot-pool dispatcher (10 slots — XAF Blazor never renders dynamically-created
+  OnActivated actions; verified in DX sources). Spec/plan in `docs/superpowers/`.
+  Suite now 152 E2E + 10 converter unit tests + mock/self tests; regression 163/0/1.
+
 ## Open Items (TODO.md)
-- ACT-001 (card 1052, P3): metadata-driven action builder for runtime entities (from
-  BACKBURNER.md — the constrained alternative to scripted ViewControllers)
+- None. Fast-follow ideas (AI-chat action verbs, ListView targets, expression values) are
+  parked in BACKBURNER.md.
 
 ## Known Issues
 - Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)

@@ -1,5 +1,18 @@
 # DONE — XafDynamicAssemblies
 
+#### ACT-001: Metadata-driven action builder for runtime entities (ID: 1052)
+
+**Completed: 2026-07-19.** Admins define buttons on entity DetailViews as pure metadata —
+live, no compilation, no restart. `CustomAction` + aggregated `CustomActionStep` entities
+(SetField/ShowMessage/OpenView steps, criteria enablement, XAF validation rules);
+`MetadataActionDispatcherController` with a source-verified slot-pool design (10
+constructor-declared slots — dynamic OnActivated actions never render in XAF Blazor;
+deterministic assignment, ceiling logged); `StepValueConverter` (10 unit tests); 9 Phase 12
+E2E tests. Two product bugs caught by review/tests en route (FullName-keyed OpenView
+resolution → simple names; stale slot map on deactivation). Full regression 163/0/1.
+Merged to master (d550fd7). Fast-follows parked in BACKBURNER: AI-chat verbs, ListView
+targets, expression values.
+
 #### DATA-001: SchemaSynchronizer.AddMissingColumns case-insensitive column matching (ID: 1050)
 
 **Completed: 2026-07-19.** Root cause: `GetExistingColumns` used `OrdinalIgnoreCase`, so a
