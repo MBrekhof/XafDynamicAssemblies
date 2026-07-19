@@ -26,10 +26,10 @@ dotnet build XafDynamicAssemblies.slnx -c EasyTest
 
 ## Tech Stack
 
-- **.NET 8** / C#, DevExpress XAF 25.2, EF Core 8
-- **Roslyn** (`Microsoft.CodeAnalysis.CSharp` 4.10) for runtime compilation
+- **.NET 10** / C#, DevExpress XAF 26.1, EF Core 10
+- **Roslyn** (`Microsoft.CodeAnalysis.CSharp` 5.0) for runtime compilation
 - **PostgreSQL 17** via Docker: `localhost:5434`, db `XafDynamicAssemblies`, user/pass `xafdynamic`
-- **EF Core provider:** `Npgsql.EntityFrameworkCore.PostgreSQL` 8.0.11
+- **EF Core provider:** `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3
 - **Blazor Server** (UI)
 - **Docker:** `docker compose up -d` starts PostgreSQL
 

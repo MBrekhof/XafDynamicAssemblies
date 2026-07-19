@@ -1,5 +1,19 @@
 # DONE — XafDynamicAssemblies
 
+#### NET-001: Upgrade to .NET 10 + EF Core 10 (ID: 1053)
+
+**Completed: 2026-07-19.** net8.0 → net10.0 (Module, Blazor.Server, Tests). EF Core
+8.0.18 → 10.0.10, Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11 → 10.0.3, Npgsql (Tests)
+8.0.6 → 10.0.3, Roslyn 4.10.0 → 5.0.0 (forced: DevExpress.ExpressApp.EFCore 26.1.3 pins
+Microsoft.CodeAnalysis.Workspaces.Common = 5.0.0 on net10.0 — NU1107 otherwise). XAF 26.1
+officially supports .NET 10 + EF Core 10 (v26.1 release notes; XAF0026). One code fix:
+XAF0035 in SchemaExportImportController — SecuritySystem.CurrentUser →
+ISecurityStrategyBase via Application.ServiceProvider (documented DX pattern).
+RuntimeAssemblyBuilder needed no changes (TRUSTED_PLATFORM_ASSEMBLIES is version-agnostic).
+Full regression on net10.0: 163/0/1 in ~32 min. New: NU1902 AngleSharp advisory surfaced by
+.NET 10 transitive audit — tracked open as SEC-002 (ID: 1054). Motivation: .NET 8 EOL
+Nov 2026; .NET 10 LTS to Nov 2028.
+
 #### ACT-001: Metadata-driven action builder for runtime entities (ID: 1052)
 
 **Completed: 2026-07-19.** Admins define buttons on entity DetailViews as pure metadata —
