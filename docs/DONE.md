@@ -1,5 +1,17 @@
 # DONE — XafDynamicAssemblies
 
+#### DATA-001: SchemaSynchronizer.AddMissingColumns case-insensitive column matching (ID: 1050)
+
+**Completed: 2026-07-19.** Root cause: `GetExistingColumns` used `OrdinalIgnoreCase`, so a
+stale differently-cased column (`email`) satisfied the existence check for `Email` and the
+correct quoted column was never created, wedging every query for that entity. Fix: ordinal
+(case-sensitive) comparison — everything else in the DDL pipeline was already exact-case, and
+Postgres allows both casings to coexist (stale extras stay harmless). TDD: failing E2E repro
+first (`SchemaSyncCaseSensitivityTests`, stale-table fixture mimicking CreateTable's shape,
+exact-case `information_schema` assertion), then the one-comparer fix. Full regression
+143 passed / 1 known-flake (Phase11 Test_10, green in isolated re-run) / 1 skipped.
+Merged to master (97211a8).
+
 #### DX-001: Upgrade DevExpress XAF 25.2.3 → 26.1.3 (ID: 1049)
 
 **Completed: 2026-07-19.** All 28 DevExpress packages bumped to 26.1.3. Product fixes:

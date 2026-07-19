@@ -33,12 +33,16 @@ run-server-mock.bat   # mock mode — required for Phase 11 AI-chat tests
 dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
+### Follow-up session 2026-07-19 (same day)
+- DATA-001 FIXED (merged 97211a8): SchemaSynchronizer column-existence check now
+  case-sensitive (Ordinal); E2E repro test `SchemaSyncCaseSensitivityTests` added.
+- SEC-001 dropped — exposed key confirmed old/invalid by owner.
+- Known flake (1st occurrence): Phase11 Test_10_ValidateSchema returned empty chat response
+  once in a full-suite run; green in isolated re-run and in all prior regressions.
+
 ## Open Items (TODO.md)
-- DATA-001 (card 1050): SchemaSynchronizer.AddMissingColumns case-insensitive matching —
-  stale differently-cased column blocks correct column creation (latent bug, repro in
-  `.superpowers/sdd/task-9-report.md`)
-- SEC-001 (card 1051): rotate the plaintext Anthropic API key in
-  `Blazor.Server/appsettings.Development.json` and move it out of git
+- ACT-001 (card 1052, P3): metadata-driven action builder for runtime entities (from
+  BACKBURNER.md — the constrained alternative to scripted ViewControllers)
 
 ## Known Issues
 - Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)
