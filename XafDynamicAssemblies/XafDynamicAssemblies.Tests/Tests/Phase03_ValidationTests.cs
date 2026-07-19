@@ -68,7 +68,7 @@ public class Phase03_ValidationTests : IAsyncLifetime
     // which takes the same default-3000 parameter and never references it.
     private async Task<(bool Saved, string ErrorText)> TrySaveAndCheckValidationAsync(int timeout = 3000)
     {
-        await _page.Locator("dxbl-toolbar-item[text=\"Save\"]").First.ClickAsync();
+        await _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Save\"], dxbl-bar-item > button[data-action-name=\"Save\"]").First.ClickAsync();
         await _page.WaitForTimeoutAsync(1500);
 
         // XAF Blazor shows validation errors in a popup/window with error details.
@@ -298,8 +298,11 @@ public class Phase03_ValidationTests : IAsyncLifetime
 
         await _page.WaitForTimeoutAsync(1000);
 
-        // Click the Test Compile All action on the ListView
-        var compileBtn = _page.Locator("dxbl-toolbar-item[text=\"Test Compile All\"]");
+        // Click the Test Compile All action on the ListView.
+        // Action Id is "TestCompile" (TestCompileController.cs); Caption "Test Compile All" is
+        // only rendered as button text, not as a `text` attribute, under DevExpress Blazor 26.1's
+        // Ribbon UI (see dx-upgrade-report.md).
+        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"TestCompile\"], dxbl-bar-item > button[data-action-name=\"TestCompile\"]");
         Assert.True(await compileBtn.CountAsync() > 0, "Test Compile All action should be visible on CustomClass ListView");
 
         await compileBtn.First.ClickAsync();
