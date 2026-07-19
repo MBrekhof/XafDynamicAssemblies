@@ -23,14 +23,22 @@ public class BasePage
     // <dxbl-bar-item> (not <dxbl-toolbar-item>), and the caption is no longer exposed as a
     // `text` attribute on the wrapper — only as a <span> inside the inner <button>. The
     // reliable, style-agnostic hook is `data-action-name`, which XAF stamps on the button with
-    // the Action's Id (ActionBase.Id — not its Caption). An internal "virtual toolbar" clone
-    // used for adaptive-layout measurement duplicates every real button off-screen inside a
-    // plain <div> instead of the custom element, so scoping to a direct `dxbl-toolbar-item`/
-    // `dxbl-bar-item` parent excludes it. Verified against the live 26.1 DOM (see
-    // dx-upgrade-report.md) — dxdocs has no page documenting `data-action-name` directly.
-    private static string ActionButtonSelector(string actionId) =>
-        $"dxbl-toolbar-item > button[data-action-name=\"{actionId}\"], " +
-        $"dxbl-bar-item > button[data-action-name=\"{actionId}\"]";
+    // the Action's rendered CAPTION — not its Id (ActionBase.Id). Confirmed in DX 26.1 source:
+    // DxActionItemActionControlBase.SetImageAndCaption(paintStyle, imageName, caption) calls
+    // both SetCaptionCore(caption) and SetDataActionNameAttribute(caption) with the same
+    // caption value (DevExpress.ExpressApp.Blazor\Templates\ActionControls\
+    // DxActionItemActionControlBase.cs:78-80; also RibbonItemModelMapper.SetDataActionName /
+    // ToolbarItemModelMapper.SetDataActionName). New/Save/Delete below pass a value that is
+    // both the caption and the Id for those built-in actions — that's coincidence, not the
+    // mechanism; callers with a differing caption (e.g. TestCompile -> "Test Compile All")
+    // must pass the caption. An internal "virtual toolbar" clone used for adaptive-layout
+    // measurement duplicates every real button off-screen inside a plain <div> instead of the
+    // custom element, so scoping to a direct `dxbl-toolbar-item`/`dxbl-bar-item` parent
+    // excludes it. Verified against the live 26.1 DOM — dxdocs has no page documenting
+    // `data-action-name` directly.
+    private static string ActionButtonSelector(string captionOrId) =>
+        $"dxbl-toolbar-item > button[data-action-name=\"{captionOrId}\"], " +
+        $"dxbl-bar-item > button[data-action-name=\"{captionOrId}\"]";
 
     /// <summary>Click the New action button in the toolbar.</summary>
     public async Task ClickNewAsync()
@@ -64,10 +72,10 @@ public class BasePage
         await WaitForLoadingAsync();
     }
 
-    /// <summary>Click a toolbar action button, identified by its Action Id (ActionBase.Id — not its Caption).</summary>
-    public async Task ClickActionAsync(string actionId)
+    /// <summary>Click a toolbar action button, identified by its rendered Caption (data-action-name — see remarks above ActionButtonSelector).</summary>
+    public async Task ClickActionAsync(string caption)
     {
-        await Page.Locator(ActionButtonSelector(actionId)).First.ClickAsync();
+        await Page.Locator(ActionButtonSelector(caption)).First.ClickAsync();
         await WaitForLoadingAsync();
     }
 }

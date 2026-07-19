@@ -299,10 +299,14 @@ public class Phase03_ValidationTests : IAsyncLifetime
         await _page.WaitForTimeoutAsync(1000);
 
         // Click the Test Compile All action on the ListView.
-        // Action Id is "TestCompile" (TestCompileController.cs); Caption "Test Compile All" is
-        // only rendered as button text, not as a `text` attribute, under DevExpress Blazor 26.1's
-        // Ribbon UI (see dx-upgrade-report.md).
-        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"TestCompile\"], dxbl-bar-item > button[data-action-name=\"TestCompile\"]");
+        // data-action-name holds the Action's rendered CAPTION ("Test Compile All"), not its
+        // Id ("TestCompile" - TestCompileController.cs). Confirmed in DX 26.1 source:
+        // DxActionItemActionControlBase.SetImageAndCaption(paintStyle, imageName, caption) calls
+        // both SetCaptionCore(caption) and SetDataActionNameAttribute(caption) with the same
+        // caption value (DevExpress.ExpressApp.Blazor\Templates\ActionControls\
+        // DxActionItemActionControlBase.cs:78-80). New/Save/Delete locators elsewhere happen to
+        // work because their Caption equals their Id.
+        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Test Compile All\"], dxbl-bar-item > button[data-action-name=\"Test Compile All\"]");
         Assert.True(await compileBtn.CountAsync() > 0, "Test Compile All action should be visible on CustomClass ListView");
 
         await compileBtn.First.ClickAsync();

@@ -233,8 +233,10 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
         await NavToCustomClassAsync();
         await _page.WaitForTimeoutAsync(1000);
 
-        // Action Id is "TestCompile" (TestCompileController.cs); see BasePage.cs remarks re: 26.1 Ribbon UI.
-        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"TestCompile\"], dxbl-bar-item > button[data-action-name=\"TestCompile\"]");
+        // data-action-name holds the Action's rendered CAPTION ("Test Compile All"), not its
+        // Id ("TestCompile" - TestCompileController.cs). See Phase03_ValidationTests.cs
+        // Test_08_TestCompileSuccess for the DX 26.1 source citation.
+        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Test Compile All\"], dxbl-bar-item > button[data-action-name=\"Test Compile All\"]");
         Assert.True(await compileBtn.CountAsync() > 0, "Test Compile All action should be visible");
         await compileBtn.First.ClickAsync();
         await _page.WaitForTimeoutAsync(3000);
