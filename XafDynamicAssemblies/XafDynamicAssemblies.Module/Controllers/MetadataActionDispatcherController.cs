@@ -66,7 +66,10 @@ namespace XafDynamicAssemblies.Module.Controllers
                 _metadataOs = Application.CreateObjectSpace(typeof(CustomAction));
                 var typeName = View.ObjectTypeInfo.Name;
                 var rows = _metadataOs.GetObjects<CustomAction>(
-                    CriteriaOperator.Parse("IsActive = ? And TargetEntity = ?", true, typeName));
+                    CriteriaOperator.Parse("IsActive = ? And TargetEntity = ?", true, typeName))
+                    // deterministic slot assignment when > MaxSlots match (overflow is logged)
+                    .OrderBy(a => a.Caption, StringComparer.Ordinal)
+                    .ThenBy(a => a.ID);
 
                 int slotIndex = 0;
                 foreach (var row in rows)
@@ -120,8 +123,8 @@ namespace XafDynamicAssemblies.Module.Controllers
 
         protected override void OnDeactivated()
         {
-            View.CurrentObjectChanged -= View_StateChanged;
             View.ObjectSpace.ObjectChanged -= ObjectSpace_ObjectChanged;
+            View.CurrentObjectChanged -= View_StateChanged;
 
             foreach (var slot in _slots)
             {
