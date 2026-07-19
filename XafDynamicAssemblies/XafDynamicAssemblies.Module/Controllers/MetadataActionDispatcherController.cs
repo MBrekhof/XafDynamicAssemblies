@@ -207,13 +207,35 @@ namespace XafDynamicAssemblies.Module.Controllers
                         break;
                     case StepKind.OpenView:
                     {
-                        var ti = XafTypesInfo.Instance.FindTypeInfo(step.TargetEntityName);
-                        if (ti == null)
+                        // Simple-name resolution (runtime types, then compiled types), same
+                        // precedent as SchemaAIToolsProvider's entity resolution -- FindTypeInfo
+                        // keys by Type.FullName, which doesn't match this metadata system's
+                        // simple-name convention used everywhere else (TargetEntity above, AI tools).
+                        var target = XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes
+                            .FirstOrDefault(t => t.Name == step.TargetEntityName);
+                        if (target == null)
+                        {
+                            foreach (var typeInfo in XafTypesInfo.Instance.PersistentTypes)
+                            {
+                                if (typeInfo.Name == step.TargetEntityName)
+                                {
+                                    target = typeInfo.Type;
+                                    break;
+                                }
+                            }
+                        }
+                        // Fallback: fully-qualified name via FindTypeInfo (existing behavior).
+                        if (target == null)
+                        {
+                            var ti = XafTypesInfo.Instance.FindTypeInfo(step.TargetEntityName);
+                            target = ti?.Type;
+                        }
+                        if (target == null)
                         {
                             ShowError($"Action '{meta.Caption}': entity '{step.TargetEntityName}' not found.");
                             return;
                         }
-                        openViewTarget = ti.Type;
+                        openViewTarget = target;
                         break;
                     }
                 }

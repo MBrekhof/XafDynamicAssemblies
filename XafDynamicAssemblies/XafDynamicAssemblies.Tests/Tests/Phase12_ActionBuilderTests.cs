@@ -342,17 +342,8 @@ public class Phase12_ActionBuilderTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Add an OpenView step targeting CustomClass; executing it navigates to the Custom Class
-    /// ListView.
-    ///
-    /// PRODUCT BUG (verified live, documented in task-3-report.md): the dispatcher's OpenView
-    /// branch resolves the target type via `XafTypesInfo.Instance.FindTypeInfo(name)`, which
-    /// (per the installed DX 25.2/26.1 `TypesInfo.cs` source) keys its lookup by `Type.FullName`
-    /// -- NOT the simple class name used everywhere else in this metadata system (TargetEntity
-    /// elsewhere in the same controller, and SchemaAIToolsProvider's entity resolution). A plain
-    /// "CustomClass" TargetEntityName reproducibly fails with "entity 'CustomClass' not found."
-    /// Using the fully-qualified name below to exercise the OpenView code path as it actually
-    /// ships today; do not read this as the intended/supported input format.
+    /// Add an OpenView step targeting CustomClass by its simple name; executing it navigates to
+    /// the Custom Class ListView.
     /// </summary>
     [Fact]
     public async Task Test_06_OpenViewStep()
@@ -362,7 +353,7 @@ public class Phase12_ActionBuilderTests : IAsyncLifetime
         await _page.WaitForTimeoutAsync(1500);
 
         await AddStepAsync(sortOrder: 2, kind: "Open view",
-            targetEntityName: "XafDynamicAssemblies.Module.BusinessObjects.CustomClass");
+            targetEntityName: "CustomClass");
 
         // Fresh unapproved record so the Test_05 criteria keeps the action enabled.
         var lv = await GotoProbeListViewAsync();
