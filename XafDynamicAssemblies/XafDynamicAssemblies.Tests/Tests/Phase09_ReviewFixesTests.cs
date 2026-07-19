@@ -90,7 +90,7 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
     /// </summary>
     private async Task<(bool Saved, string ErrorText)> TrySaveAndCheckValidationAsync()
     {
-        await _page.Locator("dxbl-toolbar-item[text=\"Save\"]").First.ClickAsync();
+        await _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Save\"], dxbl-bar-item > button[data-action-name=\"Save\"]").First.ClickAsync();
         await _page.WaitForTimeoutAsync(1500);
 
         var validationWindow = _page.Locator(".dxbl-popup-content, .dxbl-window");
@@ -127,10 +127,14 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
         return (true, "");
     }
 
-    /// <summary>Locate the Graduate toolbar action button (toolbar-item, falling back to button/span text).</summary>
+    /// <summary>
+    /// Locate the Graduate toolbar action button by Action Id ("GraduateEntity" —
+    /// see GraduateController.cs; Caption is "Graduate", but under DevExpress Blazor 26.1's
+    /// Ribbon UI the caption is only rendered as button text, not a `text` attribute).
+    /// </summary>
     private ILocator GraduateButton()
     {
-        var btn = _page.Locator("dxbl-toolbar-item[text=\"Graduate\"]");
+        var btn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Graduate\"], dxbl-bar-item > button[data-action-name=\"Graduate\"]");
         return btn;
     }
 
@@ -229,7 +233,10 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
         await NavToCustomClassAsync();
         await _page.WaitForTimeoutAsync(1000);
 
-        var compileBtn = _page.Locator("dxbl-toolbar-item[text=\"Test Compile All\"]");
+        // data-action-name holds the Action's rendered CAPTION ("Test Compile All"), not its
+        // Id ("TestCompile" - TestCompileController.cs). See Phase03_ValidationTests.cs
+        // Test_08_TestCompileSuccess for the DX 26.1 source citation.
+        var compileBtn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Test Compile All\"], dxbl-bar-item > button[data-action-name=\"Test Compile All\"]");
         Assert.True(await compileBtn.CountAsync() > 0, "Test Compile All action should be visible");
         await compileBtn.First.ClickAsync();
         await _page.WaitForTimeoutAsync(3000);

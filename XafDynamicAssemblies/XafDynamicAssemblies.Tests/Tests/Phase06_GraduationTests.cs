@@ -71,10 +71,14 @@ public class Phase06_GraduationTests : IAsyncLifetime
         await lv.WaitForGridAsync();
     }
 
-    /// <summary>Locate the Graduate toolbar action button (toolbar-item, falling back to button/span text).</summary>
+    /// <summary>
+    /// Locate the Graduate toolbar action button by Action Id ("GraduateEntity" —
+    /// see GraduateController.cs; Caption is "Graduate", but under DevExpress Blazor 26.1's
+    /// Ribbon UI the caption is only rendered as button text, not a `text` attribute).
+    /// </summary>
     private ILocator GraduateButton()
     {
-        var btn = _page.Locator("dxbl-toolbar-item[text=\"Graduate\"]");
+        var btn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Graduate\"], dxbl-bar-item > button[data-action-name=\"Graduate\"]");
         return btn;
     }
 

@@ -51,7 +51,11 @@ public static class ServerHelper
     /// <summary>Click the 'Deploy Schema' toolbar action, then dismiss the confirmation dialog if present.</summary>
     public static async Task ClickDeploySchemaAsync(IPage page)
     {
-        var deployBtn = page.Locator("dxbl-toolbar-item[text='Deploy Schema']");
+        // data-action-name holds the Action's rendered Caption ("Deploy Schema" —
+        // SchemaChangeController.cs), not its Id ("DeploySchema"). See BasePage.cs
+        // ActionButtonSelector remarks for the DX 26.1 source citation. Text-based locator
+        // kept as a last-resort fallback in case the DOM shape changes again.
+        var deployBtn = page.Locator("dxbl-toolbar-item > button[data-action-name=\"Deploy Schema\"], dxbl-bar-item > button[data-action-name=\"Deploy Schema\"]");
         if (await deployBtn.CountAsync() == 0)
             deployBtn = page.Locator("button:has-text('Deploy Schema'), span:has-text('Deploy Schema')");
         await deployBtn.First.ClickAsync();

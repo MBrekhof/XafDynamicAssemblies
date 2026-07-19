@@ -135,7 +135,12 @@ public class Phase04_HotLoadTests : IAsyncLifetime
 
         // In XAF Blazor, the aggregated Fields collection renders as a nested grid
         // with its own toolbar. Look for the "New" button in the nested area.
-        var newButtons = _page.Locator("dxbl-toolbar-item[text=\"New\"]");
+        // DevExpress Blazor 26.1: real action buttons are direct children of
+        // <dxbl-toolbar-item>/<dxbl-bar-item>; the adaptive-layout "virtual toolbar" clone wraps
+        // its (off-screen, non-interactive) copy in a plain <div> instead, so this selector
+        // excludes it. See BasePage.cs remarks.
+        var newButtons = _page.Locator(
+            "dxbl-toolbar-item > button[data-action-name=\"New\"], dxbl-bar-item > button[data-action-name=\"New\"]");
 
         if (await newButtons.CountAsync() > 1)
         {
