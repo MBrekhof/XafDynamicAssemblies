@@ -13,11 +13,11 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
     [NavigationItem("Schema Management")]
     [DefaultProperty(nameof(Caption))]
     [XafDisplayName("Custom Action")]
+    [RuleCombinationOfPropertiesIsUnique("CustomAction_Caption_Target_Unique", DefaultContexts.Save,
+        nameof(Caption) + ";" + nameof(TargetEntity))]
     public class CustomAction : BaseObject
     {
         [RuleRequiredField]
-        [RuleCombinationOfPropertiesIsUnique("CustomAction_Caption_Target_Unique", DefaultContexts.Save,
-            nameof(Caption) + ";" + nameof(TargetEntity))]
         public virtual string Caption { get; set; } = string.Empty;
 
         [RuleRequiredField]
