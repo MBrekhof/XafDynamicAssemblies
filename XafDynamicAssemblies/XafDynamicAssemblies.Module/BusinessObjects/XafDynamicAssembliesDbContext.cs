@@ -25,6 +25,9 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         public DbSet<CustomField> CustomFields { get; set; }
         public DbSet<SchemaHistory> SchemaHistory { get; set; }
 
+        public DbSet<CustomAction> CustomActions { get; set; }
+        public DbSet<CustomActionStep> CustomActionSteps { get; set; }
+
         /// <summary>
         /// Runtime entity types compiled by Roslyn. Set by AssemblyGenerationManager at startup/hot-load.
         /// Setting this property increments ModelVersion, which invalidates EF Core's cached model.
@@ -95,6 +98,23 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
                 entity.Property(e => e.IsEditable).HasDefaultValue(true);
                 entity.Property(e => e.ToolTip).HasMaxLength(512);
                 entity.Property(e => e.DisplayName).HasMaxLength(256);
+            });
+
+            // CustomAction configuration
+            modelBuilder.Entity<CustomAction>(entity =>
+            {
+                entity.HasIndex(e => new { e.TargetEntity, e.Caption }).IsUnique()
+                    .HasFilter("\"GCRecord\" = 0");
+                entity.HasMany(e => e.Steps)
+                    .WithOne(s => s.CustomAction)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // CustomActionStep configuration
+            modelBuilder.Entity<CustomActionStep>(entity =>
+            {
+                entity.Property(e => e.Kind).HasConversion<string>();
+                entity.Property(e => e.MessageType).HasConversion<string>();
             });
         }
     }
