@@ -35,9 +35,9 @@ The entire cycle takes seconds. No developer intervention required.
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | .NET 8, C# 12 |
-| Framework | DevExpress XAF 26.1, EF Core 8 |
-| Compilation | Roslyn (Microsoft.CodeAnalysis.CSharp 4.10) |
+| Runtime | .NET 10, C# 14 |
+| Framework | DevExpress XAF 26.1, EF Core 10 |
+| Compilation | Roslyn (Microsoft.CodeAnalysis.CSharp 5.0) |
 | Database | PostgreSQL 17 (via Npgsql) |
 | UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
@@ -47,7 +47,7 @@ The entire cycle takes seconds. No developer intervention required.
 
 ## Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL)
 - [DevExpress Universal Subscription](https://www.devexpress.com/) (XAF 26.1) — NuGet feed must be configured
 

@@ -1,57 +1,45 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: Test suite on .NET, DevExpress on 26.1.3 — full regression green
-## Full regression passed 2026-07-19: 143 passed / 0 failed / 1 skipped (~27 min)
+## Current Status: On .NET 10 / EF Core 10 — full regression green
+## Full regression passed 2026-07-19 (net10.0): 163 passed / 0 failed / 1 skipped (~32 min)
 
-### Session 2026-07-18/19 — Two migrations completed and merged to master
+### Session 2026-07-19 (afternoon) — NET-001 .NET 10 upgrade (merged to master)
 
-**1. Playwright test migration Python → .NET (TEST-001, merged 984f5cc)**
-- New project `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (xUnit + Microsoft.Playwright + Npgsql):
-  143 phase tests (12 files, Phases 1–11) + 5 mock-LLM self-tests + 1 manual smoke test
-- Page objects, DatabaseHelper/ServerHelper, BrowserFixture, in-process ASP.NET Core mock LLM
-  server (Anthropic + OpenAI wire formats) — all Python-parity ports, per-task reviewed
-- Python stack deleted: `tests/`, `Dockerfile.python`, compose `python` service
-- `run-server-mock.bat` added: sets `AI_MOCK_LLM_BASE_URL=http://localhost:5555` so the app
-  routes LLM calls to the in-process mock — REQUIRED for Phase 11 mocked tests / full regression
-- Live AI tests opt-in: `AI_TEST_API_KEY` env var + `--filter "Category=LiveAI"`
+- TFM net8.0 → net10.0 in all three projects; EF Core 8.0.18 → 10.0.10;
+  Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11 → 10.0.3; Npgsql (Tests) 8.0.6 → 10.0.3.
+- **Roslyn 4.10.0 → 5.0.0 was forced**: on net10.0, DevExpress.ExpressApp.EFCore 26.1.3
+  depends on Microsoft.CodeAnalysis.Workspaces.MSBuild 5.0.0 which pins Workspaces.Common
+  = 5.0.0 exactly → NU1107 against our 4.10 pin. All three Microsoft.CodeAnalysis.* refs
+  now 5.0.0 (exact — don't float to 5.3/5.6 or the pin conflicts return).
+- Code fix: XAF0035 (new analyzer warning) in SchemaExportImportController.GetCurrentUserName —
+  SecuritySystem.CurrentUser static → Application.ServiceProvider.GetService<ISecurityStrategyBase>()
+  (documented DX pattern, docs.devexpress.com/eXpressAppFramework/405775).
+- RuntimeAssemblyBuilder unchanged — TRUSTED_PLATFORM_ASSEMBLIES + loaded-assembly refs are
+  version-agnostic; runtime compilation, deploy/restart, hot-load all green on .NET 10.
+- Earlier same session: README refreshed (26.1, metadata-actions usage section, test
+  inventory incl. SchemaSyncCaseSensitivityTests; counts verified: 153 E2E + 10 unit +
+  5 mock = 163-run).
 
-**2. DevExpress XAF 25.2.3 → 26.1.3 (DX-001, merged 9b73c3b)**
-- 28 DevExpress packages bumped; build 0 warnings
-- Product fixes: `AIChat.razor` `.Content`→`.Text`; `WebApiOptions.UseResourceDelta = false`
-  in Startup.cs (26.1 defaults true under `Latest` compat mode → OData writes on runtime
-  entities 500'd; ResourceDelta<T> needs deserializer wiring EF Core apps don't get)
-- Test fixes for 26.1 Ribbon DOM: selectors now `dxbl-toolbar-item > button[data-action-name=...],
-  dxbl-bar-item > button[data-action-name=...]` — NOTE: `data-action-name` = action CAPTION,
-  not Id (verified in 26.1 sources)
-
-**Not pushed** — master is ahead of origin/master; push when ready.
+## Known Warnings (accepted)
+- **NU1902 AngleSharp 0.17.1** (moderate, GHSA-pgww-w46g-26qg) via HtmlSanitizer 9.0.892 —
+  no patched stable upstream; tracked as SEC-002 (ID: 1054) in TODO.md. Do NOT suppress.
+- EF Core 10612 (Employee/Department navigations split into two relationships) — runtime-entity
+  metadata from old test runs; harmless, DDL comes from SchemaSynchronizer not EF migrations.
 
 ## How to Verify
 ```bash
-dotnet build XafDynamicAssemblies.slnx
-run-server-mock.bat   # mock mode — required for Phase 11 AI-chat tests
+dotnet build XafDynamicAssemblies.slnx        # 0 errors, only NU1902 warnings
+run-server-mock.bat                            # mock mode — required for Phase 11 AI-chat tests
 dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
-### Follow-up session 2026-07-19 (same day)
-- DATA-001 FIXED (merged 97211a8): SchemaSynchronizer column-existence check now
-  case-sensitive (Ordinal); E2E repro test `SchemaSyncCaseSensitivityTests` added.
-- SEC-001 dropped — exposed key confirmed old/invalid by owner.
-- Known flake (1st occurrence): Phase11 Test_10_ValidateSchema returned empty chat response
-  once in a full-suite run; green in isolated re-run and in all prior regressions.
-
-### ACT-001 shipped (2026-07-19, merged d550fd7)
-- Metadata-driven action builder: live SetField/ShowMessage/OpenView buttons on DetailViews,
-  no restart. Slot-pool dispatcher (10 slots — XAF Blazor never renders dynamically-created
-  OnActivated actions; verified in DX sources). Spec/plan in `docs/superpowers/`.
-  Suite now 152 E2E + 10 converter unit tests + mock/self tests; regression 163/0/1.
-
 ## Open Items (TODO.md)
-- None. Fast-follow ideas (AI-chat action verbs, ListView targets, expression values) are
-  parked in BACKBURNER.md.
+- SEC-002 (ID: 1054): AngleSharp advisory — waiting on an HtmlSanitizer release built on
+  AngleSharp 1.x. Backburner ideas unchanged in BACKBURNER.md.
 
-## Known Issues
+## Known Issues (unchanged)
 - Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)
 - Phase04 standalone needs Phase02's `Customer` entity (full-suite order satisfies it)
 - Live AI tests report "passed" (early-return) when `AI_TEST_API_KEY` unset — by design
 - After failed test runs with stale state: kill server, clean bad metadata rows, restart
+- **Not pushed** — master is ahead of origin/master; push when ready.
