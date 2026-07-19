@@ -1,98 +1,47 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: All 10 Phases Complete — 104/104 Tests Passing
-## Full regression passed on 2026-03-04
+## Current Status: Test suite on .NET, DevExpress on 26.1.3 — full regression green
+## Full regression passed 2026-07-19: 143 passed / 0 failed / 1 skipped (~27 min)
 
-### Session 2026-03-05 — Graduation fixes, Test Compile UX, Partial class support
+### Session 2026-07-18/19 — Two migrations completed and merged to master
 
-**Test Compile moved to ListView:**
-- `TestCompileController` changed from `ObjectViewController<DetailView>` to `ObjectViewController<ListView>`
-- Caption: "Test Compile All" — reflects that it always compiled all runtime classes
-- `SelectionDependencyType.Independent` so the button is always enabled
-- Tests in phase 3 and phase 9 updated to match
+**1. Playwright test migration Python → .NET (TEST-001, merged 984f5cc)**
+- New project `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (xUnit + Microsoft.Playwright + Npgsql):
+  143 phase tests (12 files, Phases 1–11) + 5 mock-LLM self-tests + 1 manual smoke test
+- Page objects, DatabaseHelper/ServerHelper, BrowserFixture, in-process ASP.NET Core mock LLM
+  server (Anthropic + OpenAI wire formats) — all Python-parity ports, per-task reviewed
+- Python stack deleted: `tests/`, `Dockerfile.python`, compose `python` service
+- `run-server-mock.bat` added: sets `AI_MOCK_LLM_BASE_URL=http://localhost:5555` so the app
+  routes LLM calls to the in-process mock — REQUIRED for Phase 11 mocked tests / full regression
+- Live AI tests opt-in: `AI_TEST_API_KEY` env var + `--filter "Category=LiveAI"`
 
-**Graduation bug fix:**
-- `BlazorApplication.DatabaseVersionMismatch` now always auto-updates the database
-- Previously, in non-debugger mode (run-server.bat restart loop), it threw an InvalidOperationException on schema mismatch after graduation removed a type from the EF Core model
-- This was the root cause of the "deploy crashes after graduation" bug
+**2. DevExpress XAF 25.2.3 → 26.1.3 (DX-001, merged 9b73c3b)**
+- 28 DevExpress packages bumped; build 0 warnings
+- Product fixes: `AIChat.razor` `.Content`→`.Text`; `WebApiOptions.UseResourceDelta = false`
+  in Startup.cs (26.1 defaults true under `Latest` compat mode → OData writes on runtime
+  entities 500'd; ResourceDelta<T> needs deserializer wiring EF Core apps don't get)
+- Test fixes for 26.1 Ribbon DOM: selectors now `dxbl-toolbar-item > button[data-action-name=...],
+  dxbl-bar-item > button[data-action-name=...]` — NOTE: `data-action-name` = action CAPTION,
+  not Id (verified in 26.1 sources)
 
-**Visual warnings for graduation:**
-- Appearance rules on `CustomClass`: Compiled entities → gray italic, Graduating → orange italic (uses `DevExpress.Drawing.DXFontStyle`)
-- New `GraduationWarningController.cs` with two controllers:
-  - `GraduationWarningDetailController` — shows warning banner when viewing non-Runtime entity
-  - `GraduationWarningListController` — shows warning when graduated entities exist in the list
-- Improved Graduate action confirmation dialog with detailed explanation of consequences
-
-**GenerateAsPartial option:**
-- New `GenerateAsPartial` bool on `CustomClass`
-- When true, `GraduationService` generates `public partial class Foo : BaseObject` without class-level attributes ([DefaultClassOptions], [NavigationItem], [DefaultProperty])
-- Allows developer to provide attributes on a hand-written partial class
-
-**New file:** BACKBURNER.md — future ideas for runtime scripted ViewControllers (Monaco editor, cs-script integration)
-
-**Files changed:**
-- `Module/BusinessObjects/CustomClass.cs` — Added GenerateAsPartial, Appearance attributes
-- `Module/Controllers/TestCompileController.cs` — Moved to ListView
-- `Module/Controllers/GraduateController.cs` — Improved confirmation message
-- `Module/Controllers/GraduationWarningController.cs` — NEW
-- `Module/Services/GraduationService.cs` — Partial class support
-- `Blazor.Server/BlazorApplication.cs` — Always auto-update DB on version mismatch
-- `tests/tests/test_phase3_validation.py` — Updated for ListView Test Compile
-- `tests/tests/test_phase9_review_fixes.py` — Updated for ListView Test Compile
-- `BACKBURNER.md` — NEW
-
-## Test Results (per-phase standalone)
-- **104 tests total** across Phases 1-10
-- Phase 1: 11 tests (metadata CRUD)
-- Phase 2: 13 tests (runtime entity setup + compilation + CRUD)
-- Phase 3: 9 tests (validation, type dropdown, test compile)
-- Phase 4: 7 tests (hot-load deploy, nav, field add, data survival)
-- Phase 5: 8 tests (entity relationships, FK constraints)
-- Phase 6: 9 tests (graduation, source generation, data preservation)
-- Phase 7: 7 tests (degraded mode, error recovery, empty metadata, restart recovery)
-- Phase 8: 4 tests (bulk 10-class compilation, CRUD, concurrent access)
-- Phase 9: (review fixes)
-- Phase 10: 36 tests (Web API OData endpoints, Swagger, CRUD, query features, IsApiExposed toggle)
-
-## What Was Done
-
-### Phase 10 — Web API (OData)
-- `Module/BusinessObjects/CustomClass.cs` — Added `IsApiExposed` bool property
-- `Module/BusinessObjects/XafDynamicAssembliesDbContext.cs` — Added `HasDefaultValue(false)` for IsApiExposed
-- `Module/Module.cs` — Added `EarlyBootstrap()`, `ApiExposedClassNames`, updated `QueryMetadata()` SQL with defensive column check
-- `Blazor.Server/Startup.cs` — Added `AddXafWebApi()`, `AddControllers().AddOData()`, Swagger, `EarlyBootstrap()` call
-- `Blazor.Server/XafDynamicAssemblies.Blazor.Server.csproj` — Added DevExpress.ExpressApp.WebApi + Swashbuckle NuGet packages
-- `Module/Services/GraduationService.cs` — Added Web API note to graduation output when IsApiExposed=true
-- `tests/tests/test_phase10_web_api.py` — 36 tests (Swagger, OData CRUD, query features, API toggle)
-
-### Phase 6 — Graduation
-- `Module/Services/GraduationService.cs` — Generates production C# source + DbContext snippet + migration note
-- `Module/Controllers/GraduateController.cs` — SimpleAction on CustomClass DetailView: generates source, sets Status=Compiled
-- `Module/BusinessObjects/CustomClass.cs` — Added `GraduatedSource` property for storing generated code
-- `tests/tests/test_phase6_graduation.py` — 9 tests
-
-### Phase 7 — Error Handling + Hardening
-- `Module/Module.cs` — Added `DegradedMode` / `DegradedModeReason` static properties; improved `BootstrapRuntimeEntities` with separate DDL/compilation error handling
-- `Module/Services/SchemaChangeOrchestrator.cs` — DDL failures non-fatal (extra columns harmless); compilation failures trigger restart; always `RestartNeeded = true`
-- `tests/tests/test_phase7_error_handling.py` — 7 tests
-
-### Phase 8 — Performance + Polish
-- `tests/tests/test_phase8_performance.py` — 4 tests (bulk create 10 classes, deploy, CRUD, concurrent page loads)
-
-## What Was Fixed (2026-03-04)
-- **Graceful shutdown hang**: `RestartService.RequestRestart()` used `StopApplication()` which hung
-  due to active Blazor SignalR connections. Changed to `Environment.Exit(42)` in `Startup.cs`
-  for force-exit, allowing `run-server.bat` to detect exit code 42 and restart cleanly.
+**Not pushed** — master is ahead of origin/master; push when ready.
 
 ## How to Verify
 ```bash
 dotnet build XafDynamicAssemblies.slnx
-run-server-mock.bat
+run-server-mock.bat   # mock mode — required for Phase 11 AI-chat tests
 dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
+## Open Items (TODO.md)
+- DATA-001 (card 1050): SchemaSynchronizer.AddMissingColumns case-insensitive matching —
+  stale differently-cased column blocks correct column creation (latent bug, repro in
+  `.superpowers/sdd/task-9-report.md`)
+- SEC-001 (card 1051): rotate the plaintext Anthropic API key in
+  `Blazor.Server/appsettings.Development.json` and move it out of git
+
 ## Known Issues
-- Non-collectible ALC — types persist in memory across hot-loads. Works with process-level restart.
-- Server MUST be started via `run-server.bat` for deploy+restart to work.
-- Adding new EF Core columns to CustomClass requires `--updateDatabase --forceUpdate --silent`.
-- After failed test runs that leave stale state, server must be killed and restarted fresh.
+- Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)
+- Phase04 standalone needs Phase02's `Customer` entity (full-suite order satisfies it)
+- Live AI tests report "passed" (early-return) when `AI_TEST_API_KEY` unset — by design
+- After failed test runs with stale state: kill server, clean bad metadata rows, restart
