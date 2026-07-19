@@ -93,7 +93,7 @@ namespace XafDynamicAssemblies.Module.Services
                 if (IsReferenceField(field))
                 {
                     var fkColName = field.FieldName + "Id";
-                    if (!existingColumns.Contains(fkColName, StringComparer.OrdinalIgnoreCase))
+                    if (!existingColumns.Contains(fkColName))
                     {
                         var nullable = field.IsRequired ? "NOT NULL" : "NULL";
                         var sql = $"ALTER TABLE {tableName} ADD COLUMN {QuoteIdentifier(fkColName)} uuid {nullable}";
@@ -103,7 +103,7 @@ namespace XafDynamicAssemblies.Module.Services
                 }
                 else
                 {
-                    if (!existingColumns.Contains(field.FieldName, StringComparer.OrdinalIgnoreCase))
+                    if (!existingColumns.Contains(field.FieldName))
                     {
                         var pgType = SupportedTypes.GetPostgresType(field.TypeName);
                         var nullable = field.IsRequired ? "NOT NULL" : "NULL";
@@ -184,7 +184,11 @@ namespace XafDynamicAssemblies.Module.Services
 
         private HashSet<string> GetExistingColumns(NpgsqlConnection conn, string tableName)
         {
-            var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // ponytail: Ordinal (case-sensitive) — Postgres treats "Email" and "email" as
+            // distinct columns (DATA-001). A case-insensitive check let a stale differently-
+            // cased column silently satisfy the existence check for the real, exact-quoted
+            // column name, so the correctly-cased ALTER TABLE ADD COLUMN never ran.
+            var columns = new HashSet<string>(StringComparer.Ordinal);
             using var cmd = new NpgsqlCommand(
                 "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = @name",
                 conn);
