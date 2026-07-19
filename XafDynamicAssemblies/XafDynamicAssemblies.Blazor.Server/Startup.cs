@@ -106,6 +106,25 @@ namespace XafDynamicAssemblies.Blazor.Server
 
             services.AddXafWebApi(Configuration, options =>
             {
+                // DX 26.1: WebApiOptions.UseResourceDelta defaults to true because
+                // Program.cs sets FrameworkSettings.DefaultSettingsCompatibilityMode = Latest
+                // (v26_1 toggles UseResourceDelta on). UseResourceDelta=true makes OData POST/
+                // PATCH/PUT bind to the new DevExpress.ExpressApp.WebApi.EFCore.ResourceDelta<T>
+                // type instead of Microsoft.AspNetCore.OData.Deltas.Delta<T>. Binding
+                // ResourceDelta<T> requires the custom XafODataDeserializerProvider/
+                // XafODataResourceDeserializer services wired via
+                // ODataStartupExtensions.ConfigureXafWebApiServices(), which this EF Core app
+                // (correctly, per DX's own "Integrate the Web API" doc sample) never calls.
+                // Without that wiring, ASP.NET Core OData doesn't recognize ResourceDelta<T>,
+                // falls back to the default System.Text.Json input formatter, and STJ throws
+                // "Each parameter in the deserialization constructor ... must bind to an object
+                // property" trying to reflect-construct ResourceDelta<T>(ITypeInfo) — 500 on
+                // every OData write. Disabling UseResourceDelta reverts to Delta<T>, the
+                // mechanism 25.2 always used and the one already wired up here. Per dxdocs
+                // (WebApiOptions.UseResourceDelta property page), this only risks "complex
+                // update scenarios such as Deep Update" (not used by this app).
+                options.UseResourceDelta = false;
+
                 // Always expose metadata entities
                 options.BusinessObject<CustomClass>();
                 options.BusinessObject<CustomField>();
