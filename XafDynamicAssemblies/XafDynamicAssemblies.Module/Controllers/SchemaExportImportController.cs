@@ -2,6 +2,7 @@ using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
 using DevExpress.ExpressApp.Security;
 using DevExpress.Persistent.Base;
+using Microsoft.Extensions.DependencyInjection;
 using XafDynamicAssemblies.Module.BusinessObjects;
 using XafDynamicAssemblies.Module.Services;
 
@@ -92,10 +93,9 @@ namespace XafDynamicAssemblies.Module.Controllers
             os.CommitChanges();
         }
 
-        private string GetCurrentUserName() => SecuritySystem.CurrentUser switch
-        {
-            ISecurityUser user => user.UserName,
-            _ => Environment.UserName,
-        };
+        private string GetCurrentUserName() =>
+            Application.ServiceProvider?.GetService<ISecurityStrategyBase>()?.User is ISecurityUser user
+                ? user.UserName
+                : Environment.UserName;
     }
 }
