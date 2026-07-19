@@ -133,6 +133,7 @@ namespace XafDynamicAssemblies.Module.Controllers
                 slot.Enabled.RemoveItem(InvalidCriteriaKey);
             }
 
+            _current.Clear();
             _metadataOs?.Dispose();
             _metadataOs = null;
             base.OnDeactivated();
