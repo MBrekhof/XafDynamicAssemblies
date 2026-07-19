@@ -138,8 +138,9 @@ public class SchemaSyncCaseSensitivityTests : IAsyncLifetime
                 new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
             await _page.WaitForTimeoutAsync(3000);
             await lv.WaitForGridAsync();
-            var errorCount = await _page.Locator(".dx-notification-message, .xaf-error, text=An error has occurred")
-                .CountAsync();
+            var errorLocator = _page.Locator(".dx-notification-message, .xaf-error")
+                .Or(_page.GetByText("An error has occurred"));
+            var errorCount = await errorLocator.CountAsync();
             Assert.Equal(0, errorCount);
         }
         finally
