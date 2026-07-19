@@ -42,4 +42,3 @@ dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=
 - Phase04 standalone needs Phase02's `Customer` entity (full-suite order satisfies it)
 - Live AI tests report "passed" (early-return) when `AI_TEST_API_KEY` unset — by design
 - After failed test runs with stale state: kill server, clean bad metadata rows, restart
-- **Not pushed** — master is ahead of origin/master; push when ready.
