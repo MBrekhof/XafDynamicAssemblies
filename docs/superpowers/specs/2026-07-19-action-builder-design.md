@@ -78,14 +78,25 @@ both under the Schema Management nav group. No custom editors in v1.
 `Module/Controllers/MetadataActionDispatcherController.cs`, `ViewController<DetailView>`
 (no object-type constraint → considered for every DetailView).
 
+**Implementation amendment (2026-07-19, verified against DX 26.1 sources during Task 2):**
+XAF Blazor resolves toolbar/Ribbon container membership from the Application Model, which is
+generated from CONSTRUCTOR-declared controller actions before any view activates — actions
+created dynamically in `OnActivated` never render (and `Controller.Actions` has no `Remove`,
+so per-activation re-adds would throw on duplicate ids). The dispatcher therefore declares a
+fixed POOL of 10 slot `SimpleAction`s in its constructor (`CustomActionSlot0..9`,
+PredefinedCategory.Edit) and, per activation, assigns matching metadata rows to slots
+(Caption/ConfirmationMessage/criteria) and hides unused slots via `Active[key] = false`.
+**Ceiling: 10 active actions per target entity type**; overflow is logged and slot
+assignment is deterministic (ordered by Caption, then ID).
+
 OnActivated:
 1. Open a dedicated `IObjectSpace` for `CustomAction` (never the view's — keeps the view's
    object space unmodified). Dispose it on deactivation.
 2. Query: `IsActive && TargetEntity == View.ObjectTypeInfo.Name`. Fresh query per
    activation = live behavior; no caching in v1.
-3. For each row: create `SimpleAction(this, $"CustomAction_{row.ID:N}", PredefinedCategory.Edit)`
-   with Caption and ConfirmationMessage from metadata; subscribe `Execute`; register in
-   `Actions`.
+3. Assign each row (ordered by Caption, then ID) to the next pool slot: set Caption and
+   ConfirmationMessage from metadata; `Execute` handlers are subscribed once in the
+   constructor and route to the assigned row via a per-activation slot→row map.
 4. Parse Criteria once (`CriteriaOperator.Parse` in try/catch). Unparseable → action
    disabled via BoolList reason `"InvalidCriteria"` + `ILogger` warning; never a user-facing
    throw.
@@ -93,9 +104,13 @@ OnActivated:
    enablement: `View.ObjectSpace.IsObjectFitForCriteria(criteria, View.CurrentObject)` →
    `action.Enabled["CriteriaFit"]`. Null criteria = always enabled.
 
-OnDeactivated: unsubscribe all handlers (reverse order), remove created actions from the
-controller, dispose the metadata object space. Follows the xaf-viewcontroller-patterns rules
-(no ObjectSpace leaks, no dangling event subscriptions).
+OnDeactivated: unsubscribe all handlers (reverse order). Slot actions are NOT removed — they
+persist for the controller's lifetime with `Execute` subscribed once, in the constructor.
+Deactivation instead clears the slot→row map (so a stale click after deactivation misses the
+lookup and shows a friendly "no longer available" message instead of touching a disposed
+object space), resets each slot's `Active`/`Enabled` BoolList keys, and disposes the metadata
+object space. Follows the xaf-viewcontroller-patterns rules (no ObjectSpace leaks, no dangling
+event subscriptions).
 
 ## Step Execution
 
@@ -110,8 +125,11 @@ On `Execute` (runs in the SimpleAction handler, `SimpleActionExecuteEventArgs e`
    - **ShowMessage**: `Application.ShowViewStrategy.ShowMessage(text, InformationType per
      MessageType)` — displays immediately, in step order.
    - **OpenView**: record the target; after the loop, set `e.ShowViewParameters.CreatedView`
-     to `Application.CreateListView(targetType)` resolved through TypesInfo (works for
-     runtime types). Metadata validation guarantees at most one OpenView step.
+     to `Application.CreateListView(targetType)`. Target type resolution tries, in order:
+     runtime types (`XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes`) by simple name,
+     then compiled `XafTypesInfo.Instance.PersistentTypes` by simple name, then
+     `XafTypesInfo.Instance.FindTypeInfo` as a fully-qualified-name fallback (existing
+     behavior). Metadata validation guarantees at most one OpenView step.
 3. If at least one SetField executed and no step aborted: one `View.ObjectSpace.CommitChanges()`.
    The view updates immediately (its own object space committed).
 

@@ -13,4 +13,7 @@
     <PackageReference Include="xunit" Version="2.9.*" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.*" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\XafDynamicAssemblies.Module\XafDynamicAssemblies.Module.csproj" />
+  </ItemGroup>
 </Project>

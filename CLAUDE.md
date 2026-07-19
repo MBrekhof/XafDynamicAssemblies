@@ -73,6 +73,8 @@ Two metadata tables drive everything:
 | `AIChatService` | LLMTornado integration, conversation history, tool loop, Polly retry |
 | `SchemaAIToolsProvider` | 10 AI tools for schema CRUD and role management |
 | `SchemaDiscoveryService` | ITypesInfo reflection for AI system prompt |
+| `MetadataActionDispatcherController` | Materializes CustomAction rows as SimpleActions on DetailView via a constructor-declared 10-slot pool; live, no restart |
+| `StepValueConverter` | Converts a CustomActionStep string literal to its target member type (SetField), invariant culture |
 
 ### Entity Relationships
 
@@ -87,6 +89,10 @@ Runtime entities can be exposed as OData REST endpoints via XAF's built-in Web A
 - **OData features:** $filter, $select, $expand, $orderby, $top, $skip, $count
 - **Swagger:** Available at `/swagger` in development mode
 - **Endpoint refresh:** Process restart (exit code 42) re-registers endpoints based on current metadata
+
+### Metadata Actions
+
+`CustomAction`/`CustomActionStep` let admins add DetailView buttons (SetField, ShowMessage, OpenView steps) as pure metadata — no Roslyn, no compilation, no restart. `MetadataActionDispatcherController` (`ViewController<DetailView>`) declares a fixed pool of 10 slot `SimpleAction`s in its **constructor** — XAF Blazor resolves Ribbon container membership from constructor-declared actions only, so actions created in `OnActivated` never render. On each `OnActivated` it queries active `CustomAction` rows matching `View.ObjectTypeInfo.Name`, assigns them to slots in deterministic order (Caption, then ID), and hides unused slots — a **10-actions-per-entity ceiling**; overflow is logged, not thrown. A new/changed action appears the next time its DetailView opens — genuinely live, unlike the deploy/restart cycle used for schema changes. Steps run in `SortOrder`: SetField resolves the member via `ObjectTypeInfo.FindMember` and converts the literal through `StepValueConverter`; ShowMessage displays immediately; OpenView resolves the target type by **simple name** (runtime types first, then compiled `XafTypesInfo`, falling back to `FindTypeInfo` for fully-qualified names — same resolution precedent as `SchemaAIToolsProvider`) and opens its ListView after the loop. One `ObjectSpace.CommitChanges()` fires only if at least one SetField ran and no step aborted. Metadata validation (XAF Validation module, on save): required fields per step kind, unique (TargetEntity, Caption), at most one OpenView step per action, and criteria parseability as a save-time warning (target type may not exist yet).
 
 ### AI Schema Assistant
 
@@ -142,4 +148,8 @@ System.Byte[]   → bytea
 - AI UI: `Blazor.Server/Editors/AIChatViewItem/AIChat.razor`
 - AI Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/Tests/Phase11_AIChatMockedTests.cs`, `Phase11_AIChatLiveTests.cs`
 - Mock LLM: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/MockLlm/MockLlmServer.cs`, `ScriptMatcher.cs`
+- Metadata Actions: `Module/BusinessObjects/CustomAction.cs`, `CustomActionStep.cs`
+- Metadata Actions dispatcher: `Module/Controllers/MetadataActionDispatcherController.cs`
+- Metadata Actions converter: `Module/Services/StepValueConverter.cs`
+- Metadata Actions tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/Tests/Phase12_ActionBuilderTests.cs`, `StepValueConverterTests.cs`
 - Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (Playwright .NET/xUnit, page objects in `Pages/`)

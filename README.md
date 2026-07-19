@@ -28,7 +28,8 @@ The entire cycle takes seconds. No developer intervention required.
 - **Schema export/import** — download schema definitions as JSON files, upload to restore or migrate between environments
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
-- **143 end-to-end tests** across 11 phases, all passing (.NET/Playwright/xUnit)
+- **Metadata-driven actions** — add buttons to a DetailView without writing code: `SetField`/`ShowMessage`/`OpenView` steps defined as metadata, live the next time the view opens (no deploy, no restart, no compilation); up to 10 actions per entity
+- **152 end-to-end tests** across 12 phases, all passing (.NET/Playwright/xUnit)
 
 ## Tech Stack
 
@@ -41,7 +42,7 @@ The entire cycle takes seconds. No developer intervention required.
 | UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
 | Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
-| Testing | Playwright (.NET) + xUnit, 143 E2E tests across 11 phases (+ 5 mock-server self-tests) |
+| Testing | Playwright (.NET) + xUnit, 152 E2E tests across 12 phases (+ 5 mock-server self-tests + 10 step-value-converter unit tests) |
 | Infrastructure | Docker Compose (PostgreSQL) |
 
 ## Prerequisites
@@ -210,7 +211,8 @@ XafDynamicAssemblies/
 │   │   ├── GraduateController.cs         # Graduate
 │   │   ├── GraduationWarningController.cs # Visual warnings for graduated/graduating entities
 │   │   ├── SchemaExportImportController.cs # Export/Import Schema (file download/upload)
-│   │   └── TestCompileController.cs      # Test Compile All (ListView action)
+│   │   ├── TestCompileController.cs      # Test Compile All (ListView action)
+│   │   └── MetadataActionDispatcherController.cs # Live CustomAction slot-pool dispatcher (DetailView)
 │   ├── Validation/                       # Name validation rules
 │   └── Module.cs                         # Bootstrap, metadata query
 │
@@ -227,7 +229,7 @@ XafDynamicAssemblies/
 │   │   ├── ListViewPage.cs               # Grid interactions
 │   │   └── DetailViewPage.cs             # Form interactions
 │   ├── MockLlm/                          # In-process mock LLM server (port 5555)
-│   └── Tests/                            # 11 phases, 143 tests + 5 mock-server self-tests
+│   └── Tests/                            # 12 phases, 152 tests + 5 mock-server self-tests + 10 converter unit tests
 │       ├── Phase01_MetadataCrudTests.cs
 │       ├── Phase02_RuntimeEntityTests.cs
 │       ├── Phase03_ValidationTests.cs
@@ -239,7 +241,8 @@ XafDynamicAssemblies/
 │       ├── Phase09_ReviewFixesTests.cs
 │       ├── Phase10_WebApiTests.cs
 │       ├── Phase11_AIChatMockedTests.cs
-│       └── Phase11_AIChatLiveTests.cs
+│       ├── Phase11_AIChatLiveTests.cs
+│       └── Phase12_ActionBuilderTests.cs
 │
 ├── docker-compose.yml                    # PostgreSQL 17
 ├── run-server.bat / run-server.sh        # Windows / Linux restart wrapper
@@ -283,7 +286,9 @@ AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tes
 | 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
 | 11 — AI Chat (Mocked) | 15 | Chat panel, prompt suggestions, entity/field proposals, roles, multi-turn (requires `run-server-mock.bat`) |
 | 11 — AI Chat (Live) | 5 | Live AI entity creation, modification, ambiguity resolution, multi-turn (opt-in, requires `AI_TEST_API_KEY`) |
+| 12 — Action Builder | 9 | CustomAction/CustomActionStep UI, live activation without restart, SetField/ShowMessage/OpenView execution, criteria-based enablement, validation |
 | — Mock LLM Server | 5 | Self-tests for the in-process mock LLM server/script matcher |
+| — Step Value Converter | 10 | Unit tests converting CustomActionStep literals to member types (SetField) |
 
 ### Test Environment
 
