@@ -29,27 +29,27 @@ The entire cycle takes seconds. No developer intervention required.
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
 - **Metadata-driven actions** — add buttons to a DetailView without writing code: `SetField`/`ShowMessage`/`OpenView` steps defined as metadata, live the next time the view opens (no deploy, no restart, no compilation); up to 10 actions per entity
-- **152 end-to-end tests** across 12 phases, all passing (.NET/Playwright/xUnit)
+- **163-test regression suite** — Playwright E2E across 12 phases plus unit tests, all passing (.NET/Playwright/xUnit)
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Runtime | .NET 8, C# 12 |
-| Framework | DevExpress XAF 25.2, EF Core 8 |
+| Framework | DevExpress XAF 26.1, EF Core 8 |
 | Compilation | Roslyn (Microsoft.CodeAnalysis.CSharp 4.10) |
 | Database | PostgreSQL 17 (via Npgsql) |
 | UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
 | Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
-| Testing | Playwright (.NET) + xUnit, 152 E2E tests across 12 phases (+ 5 mock-server self-tests + 10 step-value-converter unit tests) |
+| Testing | Playwright (.NET) + xUnit, 153 E2E tests across 12 phases (+ 5 mock-server self-tests + 10 step-value-converter unit tests) |
 | Infrastructure | Docker Compose (PostgreSQL) |
 
 ## Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for PostgreSQL)
-- [DevExpress Universal Subscription](https://www.devexpress.com/) (XAF 25.2) — NuGet feed must be configured
+- [DevExpress Universal Subscription](https://www.devexpress.com/) (XAF 26.1) — NuGet feed must be configured
 
 ## Quick Start
 
@@ -162,6 +162,26 @@ Talk to the system in plain English to create, modify, or delete runtime entitie
 
 The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 10 schema management tools. It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
 
+### Metadata Actions (Codeless DetailView Buttons)
+
+Add a button to any entity's DetailView without writing a controller — pure metadata, live the next time the view opens. No deploy, no restart, no compilation.
+
+1. Navigate to **Schema Management > Custom Action**
+2. Create an action: **Caption** (button text), **Target Entity** (simple class name, e.g. `Invoice`), optional **Criteria** (XAF criteria string — button is disabled when the current object doesn't match), optional **Confirmation Message**
+3. Add **Steps**, executed in `SortOrder`:
+
+| Step kind | What it does | Fields |
+|-----------|--------------|--------|
+| `SetField` | Sets a property on the current object (value converted to the member's type) | `FieldName`, `Value` |
+| `ShowMessage` | Displays a toast (Info/Success/Warning/Error) | `MessageText`, `MessageType` |
+| `OpenView` | Opens another entity's ListView after the steps complete | `TargetEntityName` |
+
+4. Save — the button appears the next time a DetailView of the target entity opens
+
+If at least one `SetField` ran, changes are committed in a single save. Validation runs on save: required fields per step kind, unique (TargetEntity, Caption), at most one `OpenView` per action. Works on both runtime and compiled entities; limit is 10 actions per entity type.
+
+Under the hood: XAF Blazor only renders actions declared in a controller's constructor, so `MetadataActionDispatcherController` maintains a fixed pool of 10 slot actions and assigns metadata to them on each view activation.
+
 ### Schema Export / Import
 
 From the **Custom Class** list view, use the toolbar actions:
@@ -193,6 +213,8 @@ XafDynamicAssemblies/
 │   ├── BusinessObjects/                  # EF Core entities + DbContext
 │   │   ├── CustomClass.cs               # Runtime entity metadata
 │   │   ├── CustomField.cs               # Runtime field definitions
+│   │   ├── CustomAction.cs              # Metadata action definitions
+│   │   ├── CustomActionStep.cs          # Action steps (SetField/ShowMessage/OpenView)
 │   │   └── XafDynamicAssembliesDbContext.cs
 │   ├── Services/                         # Core engine
 │   │   ├── RuntimeAssemblyBuilder.cs     # Roslyn C# generation + compilation
@@ -205,7 +227,8 @@ XafDynamicAssemblies/
 │   │   ├── SupportedTypes.cs             # Type mapping
 │   │   ├── AIChatService.cs              # LLMTornado integration + tool loop
 │   │   ├── SchemaAIToolsProvider.cs      # 10 AI tools for schema CRUD
-│   │   └── SchemaDiscoveryService.cs     # ITypesInfo reflection for AI prompt
+│   │   ├── SchemaDiscoveryService.cs     # ITypesInfo reflection for AI prompt
+│   │   └── StepValueConverter.cs         # SetField literal → member type conversion
 │   ├── Controllers/                      # XAF actions
 │   │   ├── SchemaChangeController.cs     # Deploy Schema
 │   │   ├── GraduateController.cs         # Graduate
@@ -229,7 +252,7 @@ XafDynamicAssemblies/
 │   │   ├── ListViewPage.cs               # Grid interactions
 │   │   └── DetailViewPage.cs             # Form interactions
 │   ├── MockLlm/                          # In-process mock LLM server (port 5555)
-│   └── Tests/                            # 12 phases, 152 tests + 5 mock-server self-tests + 10 converter unit tests
+│   └── Tests/                            # 12 phases, 153 E2E tests + 5 mock-server self-tests + 10 converter unit tests
 │       ├── Phase01_MetadataCrudTests.cs
 │       ├── Phase02_RuntimeEntityTests.cs
 │       ├── Phase03_ValidationTests.cs
@@ -242,7 +265,9 @@ XafDynamicAssemblies/
 │       ├── Phase10_WebApiTests.cs
 │       ├── Phase11_AIChatMockedTests.cs
 │       ├── Phase11_AIChatLiveTests.cs
-│       └── Phase12_ActionBuilderTests.cs
+│       ├── Phase12_ActionBuilderTests.cs
+│       ├── SchemaSyncCaseSensitivityTests.cs
+│       └── StepValueConverterTests.cs
 │
 ├── docker-compose.yml                    # PostgreSQL 17
 ├── run-server.bat / run-server.sh        # Windows / Linux restart wrapper
@@ -287,6 +312,7 @@ AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tes
 | 11 — AI Chat (Mocked) | 15 | Chat panel, prompt suggestions, entity/field proposals, roles, multi-turn (requires `run-server-mock.bat`) |
 | 11 — AI Chat (Live) | 5 | Live AI entity creation, modification, ambiguity resolution, multi-turn (opt-in, requires `AI_TEST_API_KEY`) |
 | 12 — Action Builder | 9 | CustomAction/CustomActionStep UI, live activation without restart, SetField/ShowMessage/OpenView execution, criteria-based enablement, validation |
+| — Schema Sync Case Sensitivity | 1 | Regression: column-existence check is case-sensitive (differently-cased field rename creates a new column) |
 | — Mock LLM Server | 5 | Self-tests for the in-process mock LLM server/script matcher |
 | — Step Value Converter | 10 | Unit tests converting CustomActionStep literals to member types (SetField) |
 
