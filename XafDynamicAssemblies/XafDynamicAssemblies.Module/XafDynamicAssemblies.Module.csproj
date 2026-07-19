@@ -15,22 +15,22 @@
     <EmbeddedResource Include="Model.DesignedDiffs.xafml" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="DevExpress.ExpressApp" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Chart" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.ConditionalAppearance" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Dashboards" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.EFCore" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Notifications" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Office" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.PivotGrid" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.ReportsV2" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Scheduler" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.TreeListEditors" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.Validation" Version="25.2.3" />
-    <PackageReference Include="DevExpress.ExpressApp.ViewVariantsModule" Version="25.2.3" />
-    <PackageReference Include="DevExpress.Persistent.Base" Version="25.2.3" />
-    <PackageReference Include="DevExpress.Persistent.BaseImpl.EFCore" Version="25.2.3" />
+    <PackageReference Include="DevExpress.ExpressApp" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Chart" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.CodeAnalysis" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.ConditionalAppearance" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Dashboards" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.EFCore" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Notifications" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Office" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.PivotGrid" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.ReportsV2" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Scheduler" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.TreeListEditors" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.Validation" Version="26.1.3" />
+    <PackageReference Include="DevExpress.ExpressApp.ViewVariantsModule" Version="26.1.3" />
+    <PackageReference Include="DevExpress.Persistent.Base" Version="26.1.3" />
+    <PackageReference Include="DevExpress.Persistent.BaseImpl.EFCore" Version="26.1.3" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.10.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" />
