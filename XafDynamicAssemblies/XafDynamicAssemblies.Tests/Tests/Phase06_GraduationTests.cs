@@ -78,7 +78,7 @@ public class Phase06_GraduationTests : IAsyncLifetime
     /// </summary>
     private ILocator GraduateButton()
     {
-        var btn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"GraduateEntity\"], dxbl-bar-item > button[data-action-name=\"GraduateEntity\"]");
+        var btn = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Graduate\"], dxbl-bar-item > button[data-action-name=\"Graduate\"]");
         return btn;
     }
 
