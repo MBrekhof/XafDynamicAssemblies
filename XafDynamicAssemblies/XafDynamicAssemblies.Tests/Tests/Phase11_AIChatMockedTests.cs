@@ -389,8 +389,12 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
     //
     // The chat displays only the mock's canned follow-up text, never raw tool results —
     // so effect assertions go to the DB (real rows) and to the rendered DetailView button.
-    // Cross-suite dependency: 'Customer' must exist and be deployed (Phase02 creates it —
-    // same precedent as Phase04's documented dependency).
+    // Target entity is SchemaHistory — a COMPILED module entity ([DefaultClassOptions],
+    // always present) — deliberately NOT a runtime entity: the first full-suite run proved
+    // 'SchemaHistory' does not survive to Phase 11 (Phase07's cleanup deletes it and deploys an
+    // empty runtime set), while standalone runs masked that with leftover DB state. A
+    // compiled target removes the cross-suite dependency entirely; the dispatcher works on
+    // compiled entities by design (README, Phase12 Test_06 precedent).
 
     // ponytail: fix over the brief's literal SQL — CustomAction/CustomActionStep use XAF's
     // deferred deletion (same GCRecord soft-delete convention as CustomClass/CustomField,
@@ -433,11 +437,11 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         await chat.NavigateToChatAsync();
         await chat.WaitForPanelAsync(15_000);
 
-        await chat.SendMessageAsync("add an 'Approve' button to 'Customer'", 30_000);
+        await chat.SendMessageAsync("add an 'Approve' button to 'SchemaHistory'", 30_000);
         var response = await chat.GetLastResponseAsync();
         Assert.True(response.Length > 0, "Should receive a follow-up response");
 
-        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "Customer"), c => c == 1L);
+        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "SchemaHistory"), c => c == 1L);
         Assert.Equal(1L, actionCount);
 
         var stepCount = await PollUntilAsync(() =>
@@ -446,7 +450,7 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
             using var cmd = new NpgsqlCommand(@"
                 SELECT COUNT(*) FROM ""CustomActionSteps"" s
                 JOIN ""CustomActions"" a ON s.""CustomActionId"" = a.""ID""
-                WHERE a.""Caption"" = 'Approve' AND a.""TargetEntity"" = 'Customer'
+                WHERE a.""Caption"" = 'Approve' AND a.""TargetEntity"" = 'SchemaHistory'
                 AND (s.""GCRecord"" IS NULL OR s.""GCRecord"" = 0)
                 AND (a.""GCRecord"" IS NULL OR a.""GCRecord"" = 0)", conn);
             return (long)cmd.ExecuteScalar()!;
@@ -458,7 +462,7 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
     [Fact]
     public async Task Test_17_ChatCreatedButtonRenders()
     {
-        await _page.GotoAsync($"{TestSettings.BaseUrl}/Customer_ListView",
+        await _page.GotoAsync($"{TestSettings.BaseUrl}/SchemaHistory_ListView",
             new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
         await _page.WaitForTimeoutAsync(2000);
         var lv = new ListViewPage(_page);
@@ -470,7 +474,7 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         var btn = _page.Locator(
             "dxbl-toolbar-item > button[data-action-name=\"Approve\"], dxbl-bar-item > button[data-action-name=\"Approve\"]");
         Assert.True(await btn.CountAsync() > 0,
-            "Chat-created 'Approve' button should render on the Customer DetailView without a restart");
+            "Chat-created 'Approve' button should render on the SchemaHistory DetailView without a restart");
     }
 
     /// <summary>Disable via chat (DB IsActive=false), then delete via chat (rows gone). Doubles as cleanup.</summary>
@@ -482,12 +486,12 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         await chat.NavigateToChatAsync();
         await chat.WaitForPanelAsync(15_000);
 
-        await chat.SendMessageAsync("disable the 'Approve' action on 'Customer'", 30_000);
+        await chat.SendMessageAsync("disable the 'Approve' action on 'SchemaHistory'", 30_000);
         var isActive = await PollUntilAsync(() =>
         {
             using var conn = DatabaseHelper.GetConnection();
             using var cmd = new NpgsqlCommand(
-                "SELECT \"IsActive\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer' " +
+                "SELECT \"IsActive\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'SchemaHistory' " +
                 "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
             var result = cmd.ExecuteScalar();
             Assert.True(result is not null, "Approve action row should exist before toggling");
@@ -495,8 +499,8 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         }, active => active == false);
         Assert.False(isActive, "Action should be inactive after 'disable' via chat");
 
-        await chat.SendMessageAsync("delete the 'Approve' action on 'Customer'", 30_000);
-        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "Customer"), c => c == 0L);
+        await chat.SendMessageAsync("delete the 'Approve' action on 'SchemaHistory'", 30_000);
+        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "SchemaHistory"), c => c == 0L);
         Assert.Equal(0L, actionCount);
 
         // Steps are aggregated — deleting the action soft-deletes its steps too (GCRecord).
@@ -527,10 +531,10 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         {
             using var delSteps = new NpgsqlCommand(
                 "DELETE FROM \"CustomActionSteps\" WHERE \"CustomActionId\" IN " +
-                "(SELECT \"ID\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer')", conn);
+                "(SELECT \"ID\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'SchemaHistory')", conn);
             delSteps.ExecuteNonQuery();
             using var delAction = new NpgsqlCommand(
-                "DELETE FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer'", conn);
+                "DELETE FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'SchemaHistory'", conn);
             delAction.ExecuteNonQuery();
         }
 
