@@ -1,41 +1,43 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: On .NET 10 / EF Core 10 — full regression green
-## Full regression passed 2026-07-19 (net10.0): 163 passed / 0 failed / 1 skipped (~32 min)
+## Current Status: dependency advisories all cleared — zero NU19xx warnings
+## Verified 2026-07-31: clean build (0 warnings) + Phase 11 mocked suite 15/15
 
-### Session 2026-07-19 (afternoon) — NET-001 .NET 10 upgrade (merged to master)
+### Session 2026-07-31 — SEC-002 closed (HtmlSanitizer 9.1.974) + Phase11 flake root-caused
 
-- TFM net8.0 → net10.0 in all three projects; EF Core 8.0.18 → 10.0.10;
-  Npgsql.EntityFrameworkCore.PostgreSQL 8.0.11 → 10.0.3; Npgsql (Tests) 8.0.6 → 10.0.3.
-- **Roslyn 4.10.0 → 5.0.0 was forced**: on net10.0, DevExpress.ExpressApp.EFCore 26.1.3
-  depends on Microsoft.CodeAnalysis.Workspaces.MSBuild 5.0.0 which pins Workspaces.Common
-  = 5.0.0 exactly → NU1107 against our 4.10 pin. All three Microsoft.CodeAnalysis.* refs
-  now 5.0.0 (exact — don't float to 5.3/5.6 or the pin conflicts return).
-- Code fix: XAF0035 (new analyzer warning) in SchemaExportImportController.GetCurrentUserName —
-  SecuritySystem.CurrentUser static → Application.ServiceProvider.GetService<ISecurityStrategyBase>()
-  (documented DX pattern, docs.devexpress.com/eXpressAppFramework/405775).
-- RuntimeAssemblyBuilder unchanged — TRUSTED_PLATFORM_ASSEMBLIES + loaded-assembly refs are
-  version-agnostic; runtime compilation, deploy/restart, hot-load all green on .NET 10.
-- Earlier same session: README refreshed (26.1, metadata-actions usage section, test
-  inventory incl. SchemaSyncCaseSensitivityTests; counts verified: 153 E2E + 10 unit +
-  5 mock = 163-run).
+- **HtmlSanitizer 9.0.892 → 9.1.974 stable** (Module + Blazor.Server). Depends on
+  AngleSharp ≥1.6.0 (patched; advisory GHSA-pgww-w46g-26qg fixed in 1.5.0) — NU1902 gone.
+  Usage surface unchanged (`AllowedTags.Add`, `Sanitize`); markdown/table rendering verified
+  via Phase 11.
+- **New NU1903 batch fixed same session**: System.Security.Cryptography.Xml 8.0.3 (5× high,
+  CVE-2026-50648 batch, advisories published after 07-19) transitive via
+  DevExpress.Printing.Core → direct override to **10.0.10** in Module.csproj.
+- **Phase11 Test_10 known flake root-caused and fixed** (also hit Test_02 on cold start):
+  `AIChatPanel.WaitForResponseAsync` treated "first assistant bubble visible + 500 ms" as
+  "response ready", but DxAIChat renders a tool_use turn as an EMPTY assistant message while
+  the server-side tool runs (validate_schema = Roslyn compile, seconds) — the read raced the
+  content. Now `WaitForFunctionAsync` polls for non-empty text in the LAST assistant message.
+  Evidence: failing payloads were plain text while markdown-heavy responses passed
+  (sanitizer exonerated); Test_02 passed warm, Test_10 failed deterministically until the
+  wait fix; DATA-001's notes already recorded Test_10 as a known flake on 07-19.
+- Not run this session: the full ~32-min regression (Phase 11 covers the sanitizer's only
+  consumer; the Crypto.Xml override is audit-level). Run it before the next release-ish
+  milestone if you want belt-and-braces.
 
-## Known Warnings (accepted)
-- **NU1902 AngleSharp 0.17.1** (moderate, GHSA-pgww-w46g-26qg) via HtmlSanitizer 9.0.892 —
-  no patched stable upstream; tracked as SEC-002 (ID: 1054) in TODO.md. Do NOT suppress.
-- EF Core 10612 (Employee/Department navigations split into two relationships) — runtime-entity
-  metadata from old test runs; harmless, DDL comes from SchemaSynchronizer not EF migrations.
+## Open Items (TODO.md)
+- None. Backburner ideas in `BACKBURNER.md` (Runtime Scripted ViewControllers; ACT-001
+  fast-follows: AI-chat action verbs, ListView targets, expression values).
 
 ## How to Verify
 ```bash
-dotnet build XafDynamicAssemblies.slnx        # 0 errors, only NU1902 warnings
+dotnet build XafDynamicAssemblies.slnx        # 0 errors, 0 warnings
 run-server-mock.bat                            # mock mode — required for Phase 11 AI-chat tests
 dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
-## Open Items (TODO.md)
-- SEC-002 (ID: 1054): AngleSharp advisory — waiting on an HtmlSanitizer release built on
-  AngleSharp 1.x. Backburner ideas unchanged in BACKBURNER.md.
+## Known Warnings (accepted)
+- EF Core 10612 (Employee/Department navigations split into two relationships) — runtime-entity
+  metadata from old test runs; harmless, DDL comes from SchemaSynchronizer not EF migrations.
 
 ## Known Issues (unchanged)
 - Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)

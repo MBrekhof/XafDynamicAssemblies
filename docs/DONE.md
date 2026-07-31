@@ -1,5 +1,19 @@
 # DONE — XafDynamicAssemblies
 
+#### SEC-002: AngleSharp 0.17.1 advisory via HtmlSanitizer (NU1902) (ID: 1054)
+
+**Completed: 2026-07-31.** HtmlSanitizer 9.0.892 → **9.1.974 stable** (the wait-for-stable
+decision of 2026-07-19 paid off — no beta needed). 9.1.974 depends on AngleSharp ≥1.6.0
+(mXSS fix shipped in 1.5.0) and stable AngleSharp.Css ≥1.0.0; the exact `[0.17.1]` pin is
+gone. Our usage surface (`new HtmlSanitizer()`, `AllowedTags.Add`, `Sanitize`) unchanged in
+9.1. En route, a second advisory batch surfaced: **NU1903 System.Security.Cryptography.Xml
+8.0.3 (5× high, CVE-2026-50648 batch)** transitively via DevExpress.Printing.Core — fixed
+with a direct override to 10.0.10 in Module.csproj. Build now has **zero** NU19xx warnings.
+Verified: clean build + Phase 11 mocked AI-chat suite 15/15 (sanitizer's only consumer,
+incl. markdown/table rendering). Bonus root-cause fix: the long-known Phase11 Test_10 flake
+(also bit Test_02 on cold start) was `AIChatPanel.WaitForResponseAsync` racing DxAIChat's
+empty tool_use bubble — now waits for non-empty text in the last assistant message.
+
 #### NET-001: Upgrade to .NET 10 + EF Core 10 (ID: 1053)
 
 **Completed: 2026-07-19.** net8.0 → net10.0 (Module, Blazor.Server, Tests). EF Core

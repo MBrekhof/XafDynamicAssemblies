@@ -80,11 +80,19 @@ public class AIChatPanel : BasePage
         await WaitForResponseAsync(timeout);
     }
 
-    /// <summary>Wait for the AI to finish responding: an assistant message appears.</summary>
+    /// <summary>Wait for the AI to finish responding: the last assistant message has text.</summary>
     public async Task WaitForResponseAsync(int timeout = 30_000)
     {
-        await Page.Locator(AssistantMessages).First
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = timeout });
+        // An assistant bubble can be visible before any text exists: DxAIChat renders a
+        // tool_use turn as an empty assistant message while the server-side tool executes
+        // (validate_schema's Roslyn compile takes seconds), and the typing placeholder
+        // behaves the same on cold-start latency. Waiting for bubble visibility alone made
+        // GetLastResponseAsync race the content (Test_02/Test_10 read "").
+        await Page.WaitForFunctionAsync(
+            "sel => { const m = document.querySelectorAll(sel); " +
+            "return m.length > 0 && m[m.length - 1].innerText.trim().length > 0; }",
+            AssistantMessages,
+            new() { Timeout = timeout });
 
         await Page.WaitForTimeoutAsync(500);
     }
