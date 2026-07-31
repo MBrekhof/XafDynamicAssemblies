@@ -24,12 +24,12 @@ The entire cycle takes seconds. No developer intervention required.
 - **Graduation path** — promote runtime entities to compiled C# source code for inclusion in the main codebase
 - **Degraded mode** — if compilation fails at startup, compiled entities still work normally
 - **Web API (OData)** — expose runtime entities as REST endpoints with full CRUD and OData query support
-- **AI Schema Assistant** — conversational AI for entity CRUD via natural language (LLMTornado + Claude Sonnet)
+- **AI Schema Assistant** — conversational AI for entity CRUD and metadata actions via natural language (LLMTornado + Claude Sonnet)
 - **Schema export/import** — download schema definitions as JSON files, upload to restore or migrate between environments
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
 - **Full validation** — class names, field names, type names, and reserved words are validated before save
 - **Metadata-driven actions** — add buttons to a DetailView without writing code: `SetField`/`ShowMessage`/`OpenView` steps defined as metadata, live the next time the view opens (no deploy, no restart, no compilation); up to 10 actions per entity
-- **163-test regression suite** — Playwright E2E across 12 phases plus unit tests, all passing (.NET/Playwright/xUnit)
+- **168-test regression suite** — Playwright E2E across 12 phases plus unit tests, all passing (.NET/Playwright/xUnit)
 
 ## Tech Stack
 
@@ -42,7 +42,7 @@ The entire cycle takes seconds. No developer intervention required.
 | UI | Blazor Server |
 | Real-time | SignalR for schema change notifications |
 | Web API | DevExpress XAF Web API (OData v4), Swashbuckle (Swagger) |
-| Testing | Playwright (.NET) + xUnit, 153 E2E tests across 12 phases (+ 5 mock-server self-tests + 10 step-value-converter unit tests) |
+| Testing | Playwright (.NET) + xUnit, 156 E2E tests across 12 phases (+ 7 mock-server self-tests + 10 step-value-converter unit tests) |
 | Infrastructure | Docker Compose (PostgreSQL) |
 
 ## Prerequisites
@@ -162,6 +162,15 @@ Talk to the system in plain English to create, modify, or delete runtime entitie
 
 The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 14 schema management tools (list/describe/create/modify/delete entities, validate, pending changes, roles, and metadata actions: list_actions/create_action/delete_action/set_action_active). It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
 
+The assistant can also manage **metadata actions** (the codeless DetailView buttons described below) — and unlike entity changes, these are live without a deploy or restart:
+
+- *"Add an 'Approve' button to Invoice that sets Status to Approved and shows a confirmation message"* → `create_action`; the button appears the next time an Invoice DetailView opens
+- *"What actions are defined?"* → `list_actions` (caption, target, steps, criteria, active state)
+- *"Disable the Approve action on Invoice"* / *"…enable it again"* → `set_action_active`
+- *"Delete the Approve action on Invoice"* → `delete_action`
+
+The assistant validates the same rules as the Custom Action editor (required per-step fields, unique caption per entity, at most one OpenView step) and warns — without blocking — on unparseable criteria, a target entity that doesn't exist yet, or the 10-actions-per-entity render ceiling.
+
 ### Metadata Actions (Codeless DetailView Buttons)
 
 Add a button to any entity's DetailView without writing a controller — pure metadata, live the next time the view opens. No deploy, no restart, no compilation.
@@ -181,6 +190,8 @@ Add a button to any entity's DetailView without writing a controller — pure me
 If at least one `SetField` ran, changes are committed in a single save. Validation runs on save: required fields per step kind, unique (TargetEntity, Caption), at most one `OpenView` per action. Works on both runtime and compiled entities; limit is 10 actions per entity type.
 
 Under the hood: XAF Blazor only renders actions declared in a controller's constructor, so `MetadataActionDispatcherController` maintains a fixed pool of 10 slot actions and assigns metadata to them on each view activation.
+
+Prefer chat? The AI Schema Assistant can create, list, toggle, and delete these actions through natural language — see the example prompts above.
 
 ### Schema Export / Import
 
@@ -252,7 +263,7 @@ XafDynamicAssemblies/
 │   │   ├── ListViewPage.cs               # Grid interactions
 │   │   └── DetailViewPage.cs             # Form interactions
 │   ├── MockLlm/                          # In-process mock LLM server (port 5555)
-│   └── Tests/                            # 12 phases, 153 E2E tests + 5 mock-server self-tests + 10 converter unit tests
+│   └── Tests/                            # 12 phases, 156 E2E tests + 7 mock-server self-tests + 10 converter unit tests
 │       ├── Phase01_MetadataCrudTests.cs
 │       ├── Phase02_RuntimeEntityTests.cs
 │       ├── Phase03_ValidationTests.cs
@@ -309,11 +320,11 @@ AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tes
 | 8 — Performance | 4 | Bulk 10-class compilation, concurrent page access |
 | 9 — Review Fixes | 19 | Cross-references, required refs, field attributes, graduation escaping |
 | 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
-| 11 — AI Chat (Mocked) | 15 | Chat panel, prompt suggestions, entity/field proposals, roles, multi-turn (requires `run-server-mock.bat`) |
+| 11 — AI Chat (Mocked) | 18 | Chat panel, prompt suggestions, entity/field proposals, roles, multi-turn, chat-created metadata actions (create/toggle/delete via chat with DB-effect asserts, live button render) (requires `run-server-mock.bat`) |
 | 11 — AI Chat (Live) | 5 | Live AI entity creation, modification, ambiguity resolution, multi-turn (opt-in, requires `AI_TEST_API_KEY`) |
 | 12 — Action Builder | 9 | CustomAction/CustomActionStep UI, live activation without restart, SetField/ShowMessage/OpenView execution, criteria-based enablement, validation |
 | — Schema Sync Case Sensitivity | 1 | Regression: column-existence check is case-sensitive (differently-cased field rename creates a new column) |
-| — Mock LLM Server | 5 | Self-tests for the in-process mock LLM server/script matcher |
+| — Mock LLM Server | 7 | Self-tests for the in-process mock LLM server/script matcher (incl. action-verb tool_use wire shapes) |
 | — Step Value Converter | 10 | Unit tests converting CustomActionStep literals to member types (SetField) |
 
 ### Test Environment
