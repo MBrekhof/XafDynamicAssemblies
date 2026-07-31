@@ -48,6 +48,11 @@ public sealed class SchemaAIToolsProvider
             // Role tools
             AIFunctionFactory.Create(ListRoles, "list_roles"),
             AIFunctionFactory.Create(SetRolePermissions, "set_role_permissions"),
+            // Metadata action tools (live DetailView buttons — ACT-001)
+            AIFunctionFactory.Create(ListActions, "list_actions"),
+            AIFunctionFactory.Create(CreateAction, "create_action"),
+            AIFunctionFactory.Create(DeleteAction, "delete_action"),
+            AIFunctionFactory.Create(SetActionActive, "set_action_active"),
         };
     }
 
@@ -865,6 +870,234 @@ public sealed class SchemaAIToolsProvider
     }
 
     // ==========================================================================
+    // METADATA ACTION TOOLS (live DetailView buttons — ACT-001)
+    // ==========================================================================
+
+    [Description("List metadata actions (live DetailView buttons): caption, target entity, active state, steps, criteria. Returns a markdown table.")]
+    private string ListActions(
+        [Description("Only list actions for this target entity. Optional — pass empty to list all.")] string entityName)
+    {
+        _logger.LogInformation("[Tool:list_actions] Called with entity={Entity}", entityName);
+        try
+        {
+            using var scope = CreateObjectSpace();
+            var query = scope.Os.GetObjectsQuery<CustomAction>();
+            if (!string.IsNullOrWhiteSpace(entityName))
+                query = query.Where(a => a.TargetEntity == entityName);
+            var actions = query.OrderBy(a => a.TargetEntity).ThenBy(a => a.Caption).ToList();
+
+            if (actions.Count == 0)
+                return string.IsNullOrWhiteSpace(entityName)
+                    ? "No metadata actions defined yet. Use `create_action` to add a live button to an entity's detail view."
+                    : $"No metadata actions defined for '{entityName}'. Use `create_action` to add one.";
+
+            var sb = new StringBuilder();
+            sb.AppendLine("| Caption | Target Entity | Active | Steps | Criteria |");
+            sb.AppendLine("|---|---|---|---|---|");
+            foreach (var a in actions)
+            {
+                var steps = string.Join("; ", (a.Steps ?? Enumerable.Empty<CustomActionStep>().ToList())
+                    .OrderBy(s => s.SortOrder).Select(s => s.DisplayText));
+                sb.AppendLine($"| {a.Caption} | {a.TargetEntity} | {(a.IsActive ? "Yes" : "No")} | {steps} | {a.Criteria} |");
+            }
+            sb.AppendLine();
+            sb.AppendLine($"Total: {actions.Count} action(s)");
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Tool:list_actions] Error");
+            return $"Error listing actions: {ex.Message}";
+        }
+    }
+
+    [Description("Create a metadata action — a button on an entity's DetailView that runs steps (SetField, ShowMessage, OpenView). LIVE the next time the detail view opens: no deploy, no restart.")]
+    private string CreateAction(
+        [Description("Button caption (e.g. 'Approve'). Must be unique per target entity.")] string caption,
+        [Description("Entity whose DetailView gets the button (simple name, e.g. 'Order'). May be a runtime or compiled entity.")] string targetEntity,
+        [Description("XAF criteria string enabling the button conditionally (e.g. \"Status != 'Approved'\"). Optional.")] string criteria,
+        [Description("Confirmation prompt shown before executing. Optional.")] string confirmationMessage,
+        [Description("JSON array of steps, executed in array order. Each: {\"kind\": \"SetField\"|\"ShowMessage\"|\"OpenView\", \"fieldName\": \"...\", \"value\": \"...\", \"messageText\": \"...\", \"messageType\": \"Info\"|\"Success\"|\"Warning\"|\"Error\", \"targetEntityName\": \"...\"}. SetField needs fieldName (+value); ShowMessage needs messageText; OpenView needs targetEntityName. At most one OpenView step.")] string stepsJson)
+    {
+        _logger.LogInformation("[Tool:create_action] Creating {Caption} on {Entity}", caption, targetEntity);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(caption))
+                return "Error: caption is required.";
+            if (string.IsNullOrWhiteSpace(targetEntity))
+                return "Error: targetEntity is required.";
+
+            using var scope = CreateObjectSpace();
+            var duplicate = scope.Os.GetObjectsQuery<CustomAction>()
+                .FirstOrDefault(a => a.Caption == caption && a.TargetEntity == targetEntity);
+            if (duplicate != null)
+                return $"Error: An action '{caption}' already exists on '{targetEntity}'. Use delete_action first, then recreate it.";
+
+            List<StepDefinition> stepDefs;
+            try
+            {
+                stepDefs = JsonSerializer.Deserialize<List<StepDefinition>>(stepsJson ?? "",
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException jex)
+            {
+                return $"Error: stepsJson is not valid JSON: {jex.Message}";
+            }
+            if (stepDefs == null || stepDefs.Count == 0)
+                return "Error: stepsJson must contain at least one step — a button with no steps does nothing.";
+
+            // Mirror the XAF save rules — they do not fire on this non-secured ObjectSpace.
+            var parsed = new List<(StepKind Kind, StepDefinition Def)>();
+            foreach (var sd in stepDefs)
+            {
+                if (!Enum.TryParse<StepKind>(sd.Kind, ignoreCase: true, out var kind))
+                    return $"Error: Unknown step kind '{sd.Kind}'. Valid kinds: SetField, ShowMessage, OpenView.";
+                if (kind == StepKind.SetField && string.IsNullOrWhiteSpace(sd.FieldName))
+                    return "Error: A SetField step requires fieldName.";
+                if (kind == StepKind.ShowMessage && string.IsNullOrWhiteSpace(sd.MessageText))
+                    return "Error: A ShowMessage step requires messageText.";
+                if (kind == StepKind.OpenView && string.IsNullOrWhiteSpace(sd.TargetEntityName))
+                    return "Error: An OpenView step requires targetEntityName.";
+                parsed.Add((kind, sd));
+            }
+            if (parsed.Count(p => p.Kind == StepKind.OpenView) > 1)
+                return "Error: An action may contain at most one OpenView step.";
+
+            var warnings = new List<string>();
+            if (!string.IsNullOrWhiteSpace(criteria))
+            {
+                try { DevExpress.Data.Filtering.CriteriaOperator.Parse(criteria); }
+                catch { warnings.Add($"Criteria \"{criteria}\" could not be parsed — the button will be disabled until it is fixed."); }
+            }
+
+            var targetTypeExists =
+                XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes.Any(t => t.Name == targetEntity)
+                || XafTypesInfo.Instance.PersistentTypes.Any(ti => ti.Name == targetEntity);
+            if (!targetTypeExists)
+                warnings.Add($"Entity '{targetEntity}' is not currently a live runtime or compiled type — the button appears once that entity exists (created + deployed).");
+
+            var activeCount = scope.Os.GetObjectsQuery<CustomAction>()
+                .Count(a => a.TargetEntity == targetEntity && a.IsActive);
+            if (activeCount >= 10)
+                warnings.Add($"'{targetEntity}' already has {activeCount} active actions — the dispatcher renders at most 10 per entity, so this one may not appear until others are removed or deactivated.");
+
+            var action = scope.Os.CreateObject<CustomAction>();
+            action.Caption = caption;
+            action.TargetEntity = targetEntity;
+            action.Criteria = string.IsNullOrWhiteSpace(criteria) ? null : criteria;
+            action.ConfirmationMessage = string.IsNullOrWhiteSpace(confirmationMessage) ? null : confirmationMessage;
+            action.IsActive = true;
+
+            for (var i = 0; i < parsed.Count; i++)
+            {
+                var (kind, sd) = parsed[i];
+                var step = scope.Os.CreateObject<CustomActionStep>();
+                step.CustomAction = action;
+                step.SortOrder = i;
+                step.Kind = kind;
+                step.FieldName = sd.FieldName;
+                step.Value = sd.Value;
+                step.MessageText = sd.MessageText;
+                step.MessageType = Enum.TryParse<StepMessageType>(sd.MessageType, ignoreCase: true, out var mt)
+                    ? mt : StepMessageType.Info;
+                step.TargetEntityName = sd.TargetEntityName;
+                action.Steps.Add(step);
+            }
+
+            scope.Os.CommitChanges();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Action '{caption}' created on '{targetEntity}' with {parsed.Count} step(s).");
+            sb.AppendLine("It is LIVE the next time that entity's detail view opens — no deploy, no restart needed.");
+            foreach (var w in warnings)
+                sb.AppendLine($"- Warning: {w}");
+            _logger.LogInformation("[Tool:create_action] Created {Caption} on {Entity} with {Steps} steps",
+                caption, targetEntity, parsed.Count);
+            return sb.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Tool:create_action] Error");
+            return $"Error creating action: {ex.Message}";
+        }
+    }
+
+    [Description("Delete a metadata action (and its steps) identified by caption + target entity. The button disappears the next time the detail view opens.")]
+    private string DeleteAction(
+        [Description("The action's caption (e.g. 'Approve').")] string caption,
+        [Description("The entity the action targets (e.g. 'Order').")] string targetEntity)
+    {
+        _logger.LogInformation("[Tool:delete_action] Deleting {Caption} on {Entity}", caption, targetEntity);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(caption) || string.IsNullOrWhiteSpace(targetEntity))
+                return "Error: caption and targetEntity are required.";
+
+            using var scope = CreateObjectSpace();
+            var action = scope.Os.GetObjectsQuery<CustomAction>()
+                .FirstOrDefault(a => a.Caption == caption && a.TargetEntity == targetEntity);
+            if (action == null)
+            {
+                var available = string.Join(", ", scope.Os.GetObjectsQuery<CustomAction>()
+                    .Where(a => a.TargetEntity == targetEntity)
+                    .Select(a => a.Caption).OrderBy(c => c));
+                return $"Action '{caption}' on '{targetEntity}' not found. Actions on that entity: {(string.IsNullOrEmpty(available) ? "none" : available)}";
+            }
+
+            var stepCount = action.Steps?.Count ?? 0;
+            if (action.Steps != null)
+            {
+                foreach (var step in action.Steps.ToList())
+                    scope.Os.Delete(step);
+            }
+            scope.Os.Delete(action);
+            scope.Os.CommitChanges();
+
+            _logger.LogInformation("[Tool:delete_action] Deleted {Caption} on {Entity}", caption, targetEntity);
+            return $"Action '{caption}' on '{targetEntity}' deleted ({stepCount} step(s) removed). The button disappears the next time the detail view opens.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Tool:delete_action] Error");
+            return $"Error deleting action: {ex.Message}";
+        }
+    }
+
+    [Description("Enable or disable a metadata action without deleting it. Takes effect the next time the entity's detail view opens.")]
+    private string SetActionActive(
+        [Description("The action's caption (e.g. 'Approve').")] string caption,
+        [Description("The entity the action targets (e.g. 'Order').")] string targetEntity,
+        [Description("true to enable the button, false to hide it.")] bool isActive)
+    {
+        _logger.LogInformation("[Tool:set_action_active] {Caption} on {Entity} -> {Active}", caption, targetEntity, isActive);
+        try
+        {
+            if (string.IsNullOrWhiteSpace(caption) || string.IsNullOrWhiteSpace(targetEntity))
+                return "Error: caption and targetEntity are required.";
+
+            using var scope = CreateObjectSpace();
+            var action = scope.Os.GetObjectsQuery<CustomAction>()
+                .FirstOrDefault(a => a.Caption == caption && a.TargetEntity == targetEntity);
+            if (action == null)
+            {
+                var available = string.Join(", ", scope.Os.GetObjectsQuery<CustomAction>()
+                    .Where(a => a.TargetEntity == targetEntity)
+                    .Select(a => a.Caption).OrderBy(c => c));
+                return $"Action '{caption}' on '{targetEntity}' not found. Actions on that entity: {(string.IsNullOrEmpty(available) ? "none" : available)}";
+            }
+
+            action.IsActive = isActive;
+            scope.Os.CommitChanges();
+            return $"Action '{caption}' on '{targetEntity}' is now {(isActive ? "active" : "inactive")}. Takes effect the next time the detail view opens.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Tool:set_action_active] Error");
+            return $"Error setting action active state: {ex.Message}";
+        }
+    }
+
+    // ==========================================================================
     // JSON DTOs for tool parameters
     // ==========================================================================
 
@@ -885,5 +1118,15 @@ public sealed class SchemaAIToolsProvider
         public string NavigationGroup { get; set; }
         public string Description { get; set; }
         public bool? IsApiExposed { get; set; }
+    }
+
+    private sealed class StepDefinition
+    {
+        public string Kind { get; set; }
+        public string FieldName { get; set; }
+        public string Value { get; set; }
+        public string MessageText { get; set; }
+        public string MessageType { get; set; }
+        public string TargetEntityName { get; set; }
     }
 }
