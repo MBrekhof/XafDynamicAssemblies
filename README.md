@@ -160,7 +160,7 @@ Talk to the system in plain English to create, modify, or delete runtime entitie
 2. Type a natural language request, e.g. "Create an Invoice entity with fields Amount (decimal), DueDate (datetime), and IsPaid (boolean)"
 3. The AI creates the metadata — review and deploy as usual
 
-The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 10 schema management tools. It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
+The AI assistant uses LLMTornado with Claude Sonnet (configurable) and has access to 14 schema management tools (list/describe/create/modify/delete entities, validate, pending changes, roles, and metadata actions: list_actions/create_action/delete_action/set_action_active). It maintains conversation context for multi-turn workflows and asks clarifying questions for ambiguous requests. Configuration is in `appsettings.json` under the `AI` section.
 
 ### Metadata Actions (Codeless DetailView Buttons)
 
@@ -226,7 +226,7 @@ XafDynamicAssemblies/
 │   │   ├── SchemaExportImportService.cs  # JSON schema export/import
 │   │   ├── SupportedTypes.cs             # Type mapping
 │   │   ├── AIChatService.cs              # LLMTornado integration + tool loop
-│   │   ├── SchemaAIToolsProvider.cs      # 10 AI tools for schema CRUD
+│   │   ├── SchemaAIToolsProvider.cs      # 14 AI tools for schema CRUD and metadata actions
 │   │   ├── SchemaDiscoveryService.cs     # ITypesInfo reflection for AI prompt
 │   │   └── StepValueConverter.cs         # SetField literal → member type conversion
 │   ├── Controllers/                      # XAF actions
