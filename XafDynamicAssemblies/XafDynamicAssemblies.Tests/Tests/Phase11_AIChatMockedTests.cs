@@ -1,4 +1,6 @@
+using Npgsql;
 using XafDynamicAssemblies.Tests.Fixtures;
+using XafDynamicAssemblies.Tests.Helpers;
 using XafDynamicAssemblies.Tests.Pages;
 
 namespace XafDynamicAssemblies.Tests.Tests;
@@ -381,6 +383,132 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         // All responses should be retrievable
         var allResponses = await chat.GetAllResponsesAsync();
         Assert.True(allResponses.Count >= 2, $"Should have at least 2 assistant responses, got {allResponses.Count}");
+    }
+
+    // --- Action verbs (AI-chat action verbs, 2026-07-31 spec) ---
+    //
+    // The chat displays only the mock's canned follow-up text, never raw tool results —
+    // so effect assertions go to the DB (real rows) and to the rendered DetailView button.
+    // Cross-suite dependency: 'Customer' must exist and be deployed (Phase02 creates it —
+    // same precedent as Phase04's documented dependency).
+
+    // ponytail: fix over the brief's literal SQL — CustomAction/CustomActionStep use XAF's
+    // deferred deletion (same GCRecord soft-delete convention as CustomClass/CustomField,
+    // see DatabaseHelper.cs), so Delete()+CommitChanges() sets GCRecord rather than removing
+    // the row. Verified live: after delete_action, the row persisted with GCRecord=1. Every
+    // liveness query here needs the same ("GCRecord" IS NULL OR "GCRecord" = 0) filter
+    // DatabaseHelper already uses elsewhere in this suite.
+    private static long CountActionsInDb(string caption, string targetEntity)
+    {
+        using var conn = DatabaseHelper.GetConnection();
+        using var cmd = new NpgsqlCommand(
+            "SELECT COUNT(*) FROM \"CustomActions\" WHERE \"Caption\" = @c AND \"TargetEntity\" = @t " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
+        cmd.Parameters.AddWithValue("c", caption);
+        cmd.Parameters.AddWithValue("t", targetEntity);
+        return (long)cmd.ExecuteScalar()!;
+    }
+
+    // ponytail: deviation from the brief's literal one-shot DB check — the server-side tool
+    // commit can lag the UI response by a moment, so poll instead of asserting immediately-once.
+    // Assertions themselves (counts/values) are exactly as specified.
+    private static async Task<T> PollUntilAsync<T>(Func<T> check, Func<T, bool> until, int timeoutMs = 10_000, int intervalMs = 500)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        var last = check();
+        while (!until(last) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(intervalMs);
+            last = check();
+        }
+        return last;
+    }
+
+    /// <summary>Create an action via chat; verify the REAL rows (not just canned chat text).</summary>
+    [Fact]
+    public async Task Test_16_CreateActionViaChat()
+    {
+        await ResetMockStateAsync();
+        var chat = new AIChatPanel(_page);
+        await chat.NavigateToChatAsync();
+        await chat.WaitForPanelAsync(15_000);
+
+        await chat.SendMessageAsync("add an 'Approve' button to 'Customer'", 30_000);
+        var response = await chat.GetLastResponseAsync();
+        Assert.True(response.Length > 0, "Should receive a follow-up response");
+
+        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "Customer"), c => c == 1L);
+        Assert.Equal(1L, actionCount);
+
+        var stepCount = await PollUntilAsync(() =>
+        {
+            using var conn = DatabaseHelper.GetConnection();
+            using var cmd = new NpgsqlCommand(@"
+                SELECT COUNT(*) FROM ""CustomActionSteps"" s
+                JOIN ""CustomActions"" a ON s.""CustomActionId"" = a.""ID""
+                WHERE a.""Caption"" = 'Approve' AND a.""TargetEntity"" = 'Customer'
+                AND (s.""GCRecord"" IS NULL OR s.""GCRecord"" = 0)
+                AND (a.""GCRecord"" IS NULL OR a.""GCRecord"" = 0)", conn);
+            return (long)cmd.ExecuteScalar()!;
+        }, c => c == 2L);
+        Assert.Equal(2L, stepCount);
+    }
+
+    /// <summary>The ACT-001 integration seam: the chat-created button really renders — no restart.</summary>
+    [Fact]
+    public async Task Test_17_ChatCreatedButtonRenders()
+    {
+        await _page.GotoAsync($"{TestSettings.BaseUrl}/Customer_ListView",
+            new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
+        await _page.WaitForTimeoutAsync(2000);
+        var lv = new ListViewPage(_page);
+        await lv.WaitForGridAsync();
+        await lv.ClickNewAsync();
+        await _page.WaitForTimeoutAsync(1500);
+
+        // data-action-name carries the action CAPTION in DX 26.1 (memory: RibbonItemModelMapper).
+        var btn = _page.Locator(
+            "dxbl-toolbar-item > button[data-action-name=\"Approve\"], dxbl-bar-item > button[data-action-name=\"Approve\"]");
+        Assert.True(await btn.CountAsync() > 0,
+            "Chat-created 'Approve' button should render on the Customer DetailView without a restart");
+    }
+
+    /// <summary>Disable via chat (DB IsActive=false), then delete via chat (rows gone). Doubles as cleanup.</summary>
+    [Fact]
+    public async Task Test_18_ToggleAndDeleteActionViaChat()
+    {
+        await ResetMockStateAsync();
+        var chat = new AIChatPanel(_page);
+        await chat.NavigateToChatAsync();
+        await chat.WaitForPanelAsync(15_000);
+
+        await chat.SendMessageAsync("disable the 'Approve' action on 'Customer'", 30_000);
+        var isActive = await PollUntilAsync(() =>
+        {
+            using var conn = DatabaseHelper.GetConnection();
+            using var cmd = new NpgsqlCommand(
+                "SELECT \"IsActive\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer' " +
+                "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
+            return (bool)cmd.ExecuteScalar()!;
+        }, active => active == false);
+        Assert.False(isActive, "Action should be inactive after 'disable' via chat");
+
+        await chat.SendMessageAsync("delete the 'Approve' action on 'Customer'", 30_000);
+        var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "Customer"), c => c == 0L);
+        Assert.Equal(0L, actionCount);
+
+        // Steps are aggregated — deleting the action soft-deletes its steps too (GCRecord).
+        // Phase 12 leaves its own already-deleted CustomActionSteps rows lying around
+        // (physical rows never purged), so the LIVE count (GCRecord filter) is the exact
+        // zero here, not a raw table COUNT(*).
+        var stepCount = await PollUntilAsync(() =>
+        {
+            using var conn = DatabaseHelper.GetConnection();
+            using var cmd = new NpgsqlCommand(
+                "SELECT COUNT(*) FROM \"CustomActionSteps\" WHERE \"GCRecord\" IS NULL OR \"GCRecord\" = 0", conn);
+            return (long)cmd.ExecuteScalar()!;
+        }, c => c == 0L);
+        Assert.Equal(0L, stepCount);
     }
 
     // --- TestCleanup ---
