@@ -489,7 +489,9 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
             using var cmd = new NpgsqlCommand(
                 "SELECT \"IsActive\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer' " +
                 "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
-            return (bool)cmd.ExecuteScalar()!;
+            var result = cmd.ExecuteScalar();
+            Assert.True(result is not null, "Approve action row should exist before toggling");
+            return (bool)result!;
         }, active => active == false);
         Assert.False(isActive, "Action should be inactive after 'disable' via chat");
 
@@ -517,6 +519,21 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
     [Fact]
     public async Task Test_99_Cleanup()
     {
+        // Hard purge (no GCRecord filter, includes soft-deleted rows) of the chat-created
+        // 'Approve' action — a mid-run failure of Test_18 (which is supposed to delete it)
+        // would otherwise leave a leftover row that makes the next run's Test_16 pass
+        // spuriously (duplicate-check trips) and Test_17 fail confusingly.
+        using (var conn = DatabaseHelper.GetConnection())
+        {
+            using var delSteps = new NpgsqlCommand(
+                "DELETE FROM \"CustomActionSteps\" WHERE \"CustomActionId\" IN " +
+                "(SELECT \"ID\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer')", conn);
+            delSteps.ExecuteNonQuery();
+            using var delAction = new NpgsqlCommand(
+                "DELETE FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'Customer'", conn);
+            delAction.ExecuteNonQuery();
+        }
+
         await ResetMockStateAsync();
         await NavToCustomClassAsync();
         foreach (var name in new[]

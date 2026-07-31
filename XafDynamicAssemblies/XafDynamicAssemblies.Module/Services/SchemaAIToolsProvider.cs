@@ -950,7 +950,7 @@ public sealed class SchemaAIToolsProvider
             var parsed = new List<(StepKind Kind, StepDefinition Def)>();
             foreach (var sd in stepDefs)
             {
-                if (!Enum.TryParse<StepKind>(sd.Kind, ignoreCase: true, out var kind))
+                if (!Enum.TryParse<StepKind>(sd.Kind, ignoreCase: true, out var kind) || !Enum.IsDefined(typeof(StepKind), kind))
                     return $"Error: Unknown step kind '{sd.Kind}'. Valid kinds: SetField, ShowMessage, OpenView.";
                 if (kind == StepKind.SetField && string.IsNullOrWhiteSpace(sd.FieldName))
                     return "Error: A SetField step requires fieldName.";
@@ -998,7 +998,7 @@ public sealed class SchemaAIToolsProvider
                 step.FieldName = sd.FieldName;
                 step.Value = sd.Value;
                 step.MessageText = sd.MessageText;
-                step.MessageType = Enum.TryParse<StepMessageType>(sd.MessageType, ignoreCase: true, out var mt)
+                step.MessageType = Enum.TryParse<StepMessageType>(sd.MessageType, ignoreCase: true, out var mt) && Enum.IsDefined(typeof(StepMessageType), mt)
                     ? mt : StepMessageType.Info;
                 step.TargetEntityName = sd.TargetEntityName;
                 action.Steps.Add(step);
