@@ -31,6 +31,10 @@ public class ScriptMatcher
         ["get_pending_changes"] = "Here are the pending changes.",
         ["list_roles"] = "Here are the available roles.",
         ["validate_schema"] = "Schema validation complete.",
+        ["list_actions"] = "Here are the metadata actions.",
+        ["create_action"] = "Action created — the button appears the next time the entity's detail view opens. No deploy needed.",
+        ["delete_action"] = "Action deleted.",
+        ["set_action_active"] = "Action active state updated.",
     };
 
     private Dictionary<string, object>? _pendingEntity;
@@ -47,6 +51,39 @@ public class ScriptMatcher
         var lower = userMessage.ToLowerInvariant();
 
         if (IsConfirmation(lower)) return BuildConfirm();
+
+        // Metadata action verbs. MUST run before the generic delete/create matchers below,
+        // which would otherwise shadow "delete the Approve action" / "create an action".
+        if (lower.Contains("action") || lower.Contains("button"))
+        {
+            if (lower.Contains("list") || lower.Contains("what"))
+                return ToolUse("list_actions", new Dictionary<string, object> { ["entityName"] = "" });
+            if (lower.Contains("disable") || lower.Contains("deactivate") || lower.Contains("enable") || lower.Contains("activate"))
+                return ToolUse("set_action_active", new Dictionary<string, object>
+                {
+                    ["caption"] = "Approve",
+                    ["targetEntity"] = ExtractEntityName(userMessage),
+                    // NOTE: "deactivate".Contains("activate") is true — decide by the negative words.
+                    ["isActive"] = !(lower.Contains("disable") || lower.Contains("deactivate")),
+                });
+            if (lower.Contains("delete") || lower.Contains("remove"))
+                return ToolUse("delete_action", new Dictionary<string, object>
+                {
+                    ["caption"] = "Approve",
+                    ["targetEntity"] = ExtractEntityName(userMessage),
+                });
+            if (lower.Contains("add") || lower.Contains("create"))
+                return ToolUse("create_action", new Dictionary<string, object>
+                {
+                    ["caption"] = "Approve",
+                    ["targetEntity"] = ExtractEntityName(userMessage),
+                    ["criteria"] = "",
+                    ["confirmationMessage"] = "",
+                    ["stepsJson"] = "[{\"kind\":\"SetField\",\"fieldName\":\"Status\",\"value\":\"Approved\"},{\"kind\":\"ShowMessage\",\"messageText\":\"Approved via chat\",\"messageType\":\"Success\"}]",
+                });
+            // No verb matched — fall through to the generic rules.
+        }
+
         if (lower.Contains("list") && lower.Contains("entit")) return ToolUse("list_entities", EmptyInput());
         if (lower.Contains("list") && lower.Contains("role")) return ToolUse("list_roles", EmptyInput());
         if ((lower.Contains("describe") || lower.Contains("show")) && lower.Contains("field"))
@@ -78,15 +115,19 @@ public class ScriptMatcher
     private Dictionary<string, object> BuildCreate(string text)
     {
         var name = ExtractEntityName(text);
+        // Deviation from scripts.py (TEST-002): the Python shape (class_name/fields/
+        // navigation_group) never matched the real create_entity tool's C# parameter names
+        // (className/navigationGroup/description/fieldsJson), so the tool errored on every
+        // mocked confirm while tests passed on canned follow-up text. Keys below are the
+        // real AIFunction parameter names — same contract the action-verb matchers use.
         _pendingEntity = new Dictionary<string, object>
         {
-            ["class_name"] = name,
-            ["fields"] = new List<Dictionary<string, object>>
-            {
-                new() { ["field_name"] = "Name", ["type_name"] = "System.String" },
-                new() { ["field_name"] = "Description", ["type_name"] = "System.String" },
-            },
-            ["navigation_group"] = "Default",
+            ["className"] = name,
+            ["navigationGroup"] = "Default",
+            ["description"] = "",
+            ["fieldsJson"] =
+                "[{\"name\":\"Name\",\"type\":\"System.String\"}," +
+                "{\"name\":\"Description\",\"type\":\"System.String\"}]",
         };
         return Text(
             $"I'll create a **{name}** entity with these fields:\n" +

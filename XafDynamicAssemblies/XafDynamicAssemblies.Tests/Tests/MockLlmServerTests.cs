@@ -94,9 +94,14 @@ public class MockLlmServerTests : IAsyncLifetime
         Assert.Equal("create_entity", block.GetProperty("name").GetString());
         Assert.StartsWith("call_", block.GetProperty("id").GetString());
 
+        // TEST-002: keys must equal the real create_entity tool's C# parameter names —
+        // the old snake_case shape (class_name/fields) made the tool silently fail
+        // server-side in every mocked run while tests passed on canned follow-up text.
         var input = block.GetProperty("input");
-        Assert.Equal("Customer", input.GetProperty("class_name").GetString());
-        Assert.Equal(2, input.GetProperty("fields").GetArrayLength());
+        Assert.Equal("Customer", input.GetProperty("className").GetString());
+        var fields = JsonSerializer.Deserialize<JsonElement>(input.GetProperty("fieldsJson").GetString()!);
+        Assert.Equal(2, fields.GetArrayLength());
+        Assert.Equal("Name", fields[0].GetProperty("name").GetString());
     }
 
     [Fact]
@@ -147,5 +152,51 @@ public class MockLlmServerTests : IAsyncLifetime
         Assert.Equal("function", toolCall.GetProperty("type").GetString());
         Assert.Equal("list_entities", toolCall.GetProperty("function").GetProperty("name").GetString());
         Assert.Equal("{}", toolCall.GetProperty("function").GetProperty("arguments").GetString());
+    }
+
+    [Fact]
+    public async Task Anthropic_AddButton_Returns_ToolUse_CreateAction()
+    {
+        var body = new
+        {
+            model = "mock-model",
+            messages = new object[] { new { role = "user", content = "add an 'Approve' button to 'Customer'" } },
+        };
+        var resp = await _client.PostAsJsonAsync("/v1/messages", body);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("tool_use", json.GetProperty("stop_reason").GetString());
+        var block = json.GetProperty("content")[0];
+        Assert.Equal("create_action", block.GetProperty("name").GetString());
+
+        var input = block.GetProperty("input");
+        // Keys must equal the real tool's C# parameter names (see Global Constraints).
+        Assert.Equal("Approve", input.GetProperty("caption").GetString());
+        Assert.Equal("Customer", input.GetProperty("targetEntity").GetString());
+        var steps = JsonSerializer.Deserialize<JsonElement>(input.GetProperty("stepsJson").GetString()!);
+        Assert.Equal(2, steps.GetArrayLength());
+        Assert.Equal("SetField", steps[0].GetProperty("kind").GetString());
+        Assert.Equal("ShowMessage", steps[1].GetProperty("kind").GetString());
+    }
+
+    [Fact]
+    public async Task Anthropic_DisableAction_Returns_SetActionActive_False()
+    {
+        var body = new
+        {
+            model = "mock-model",
+            messages = new object[] { new { role = "user", content = "disable the 'Approve' action on 'Customer'" } },
+        };
+        var resp = await _client.PostAsJsonAsync("/v1/messages", body);
+        resp.EnsureSuccessStatusCode();
+
+        var json = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        var block = json.GetProperty("content")[0];
+        Assert.Equal("set_action_active", block.GetProperty("name").GetString());
+        var input = block.GetProperty("input");
+        Assert.Equal("Approve", input.GetProperty("caption").GetString());
+        Assert.Equal("Customer", input.GetProperty("targetEntity").GetString());
+        Assert.False(input.GetProperty("isActive").GetBoolean());
     }
 }

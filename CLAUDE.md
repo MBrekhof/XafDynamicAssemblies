@@ -71,7 +71,7 @@ Two metadata tables drive everything:
 | `SchemaChangeOrchestrator` | Coordinates hot-load: DDL → compile → restart via exit code 42 |
 | `GraduationService` | Generates production C# source + DbContext snippet for graduating entities |
 | `AIChatService` | LLMTornado integration, conversation history, tool loop, Polly retry |
-| `SchemaAIToolsProvider` | 10 AI tools for schema CRUD and role management |
+| `SchemaAIToolsProvider` | 14 AI tools for schema CRUD, role management, and metadata actions |
 | `SchemaDiscoveryService` | ITypesInfo reflection for AI system prompt |
 | `MetadataActionDispatcherController` | Materializes CustomAction rows as SimpleActions on DetailView via a constructor-declared 10-slot pool; live, no restart |
 | `StepValueConverter` | Converts a CustomActionStep string literal to its target member type (SetField), invariant culture |
@@ -100,7 +100,7 @@ Conversational AI interface for creating, modifying, and deleting runtime entiti
 
 - **LLM integration:** LLMTornado with Claude Sonnet as default, multi-provider support
 - **UI:** DxAIChat as navigation item (Schema Management group)
-- **Tools:** 10 AI functions (list/describe/create/modify/delete entities, validate, pending changes, roles)
+- **Tools:** 14 AI functions (list/describe/create/modify/delete entities, validate, pending changes, roles, and metadata actions: list/create/delete/toggle)
 - **System prompt:** Two-tier — lightweight entity list + on-demand `describe_entity` for full details
 - **Config:** `AI` section in `appsettings.json` (API keys in `appsettings.Development.json`)
 - **Testing:** Mocked (in-process mock LLM server on port 5555, deterministic) + Live (real AI, `[Trait("Category","LiveAI")]`, opt-in via `AI_TEST_API_KEY`)

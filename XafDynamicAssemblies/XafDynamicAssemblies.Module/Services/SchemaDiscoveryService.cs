@@ -71,6 +71,14 @@ namespace XafDynamicAssemblies.Module.Services
             sb.AppendLine("- Field names must be valid C# identifiers and cannot be reserved (Id, ObjectType, GCRecord, OptimisticLockField).");
             sb.AppendLine();
 
+            // Metadata actions capability (AI-chat action verbs)
+            sb.AppendLine("## Metadata Actions (Live Buttons)");
+            sb.AppendLine("You can add buttons to an entity's detail view with `create_action` (steps: SetField, ShowMessage, OpenView).");
+            sb.AppendLine("Actions are pure metadata: they appear the NEXT time the detail view opens — no Deploy, no restart.");
+            sb.AppendLine("Inspect with `list_actions`, remove with `delete_action`, enable/disable with `set_action_active`.");
+            sb.AppendLine("At most 10 active actions per entity render (dispatcher slot ceiling).");
+            sb.AppendLine();
+
             // Supported field types
             sb.AppendLine("## Supported Field Types");
             foreach (var typeName in SupportedTypes.AllTypeNames)
