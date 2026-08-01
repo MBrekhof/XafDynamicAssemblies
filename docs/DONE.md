@@ -1,5 +1,38 @@
 # DONE — XafDynamicAssemblies
 
+#### ACT-002: AI-chat action verbs — 4 tools for metadata actions (ID: 1139)
+
+**Completed: 2026-08-01.** The AI schema assistant now manages metadata actions (ACT-001's
+live DetailView buttons) through chat: `list_actions` / `create_action` / `delete_action` /
+`set_action_active` in `SchemaAIToolsProvider` (10 → 14 tools), live with no deploy/restart.
+create_action mirrors the XAF save rules in code (they don't fire on the non-secured tool
+ObjectSpace) — hard errors + soft warnings (criteria parse, unknown target, 10-slot
+ceiling), SortOrder from JSON array position, `Enum.IsDefined` guard. Built subagent-driven
+(spec + plan in `docs/superpowers/`), final whole-branch review clean. Tests: Phase 11
+15 → 18 E2E with DB-effect + live button-render assertions (target: compiled SchemaHistory —
+full regression #1 proved Customer doesn't survive Phase07's purge in suite order); mock
+self-tests 5 → 7. README usage examples added. Merged to master (0601031).
+
+#### TEST-001: Deploy-restart navigation race in WaitForDeployRestartAsync (ID: 1140)
+
+**Completed: 2026-08-01.** Root cause: after exit-42 restart, the reconnecting Blazor
+circuit's shortcut-restore navigation aborts the helper's `GotoAsync("/")` with "interrupted
+by another navigation" (bit Phase09 Test_09 in a full regression; green standalone). Fix:
+shared `GotoRootToleratingRedirectAsync` in ServerHelper (used by WaitForDeployRestartAsync
+AND ReloadAndWaitAsync) catches that specific interruption — which itself proves the app is
+alive — waits out the competing navigation, retries (bounded). Verified: all deploy phases +
+Phase09 green in the following full regression. Merged with ACT-002 (0601031).
+
+#### TEST-002: Mock LLM create_entity drift — class_name vs className (ID: 1141)
+
+**Completed: 2026-08-01.** The mock's canned create_entity payload used Python-era
+snake_case keys (`class_name`/`fields`), which never matched the real tool's C# parameter
+names — the tool errored on EVERY mocked confirm while Phase 11 tests passed on canned
+follow-up text alone. Fixed TDD (self-test repointed at `className`/`fieldsJson` → RED →
+mock aligned → 7/7); `Test_07_EntityExistsInMetadata` now polls for the real
+`ChatTestVerify` row in CustomClasses, so mocked create-entity coverage is genuine for the
+first time and future drift fails loudly. Merged with ACT-002 (0601031).
+
 #### SEC-002: AngleSharp 0.17.1 advisory via HtmlSanitizer (NU1902) (ID: 1054)
 
 **Completed: 2026-07-31.** HtmlSanitizer 9.0.892 → **9.1.974 stable** (the wait-for-stable

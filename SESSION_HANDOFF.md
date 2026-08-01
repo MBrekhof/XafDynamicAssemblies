@@ -1,56 +1,54 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: ACT-002 (AI-chat action verbs) implemented on feature branch, full regression in progress
-## Branch: feature/act-002-ai-action-verbs (7 code/docs commits on top of master @ 93d812a)
+## Current Status: ACT-002 + TEST-001 + TEST-002 merged to master (0601031) and pushed
+## No open tasks. Backburner: ACT-001 fast-follows (ListView targets, expression values).
 
-### Session 2026-07-31 (afternoon/evening) — ACT-002 via subagent-driven development
+### Session 2026-07-31/08-01 — three deliverables, all merged in 0601031
 
-Four new AI tools in `SchemaAIToolsProvider` (10 → 14): `list_actions`, `create_action`,
-`delete_action`, `set_action_active` — the AI schema assistant now manages metadata actions
-(ACT-001's live DetailView buttons) through chat. Unlike entity changes, these are LIVE with
-no deploy/restart.
+**ACT-002 — AI-chat action verbs.** Four new AI tools (`list_actions`, `create_action`,
+`delete_action`, `set_action_active`) in `SchemaAIToolsProvider` (10 → 14): the assistant
+manages metadata actions (ACT-001's live DetailView buttons) via chat — live, no
+deploy/restart. Validation mirrored in tool code (XAF rules don't fire on the non-secured
+ObjectSpace). Phase 11 grew to 18 E2E; mock self-tests to 7. README has usage examples.
 
-- **Commits:** d617709 (tools) → ccc62f3 (system prompt paragraph) → dccfcc9 (mock LLM
-  matchers + 2 self-tests) → 26197b8 (Phase 11 E2E Test_16–18) → 41880f3 (doc counts) →
-  6e95f1f (final-review fix wave). Spec + plan in `docs/superpowers/`.
-- **create_action** mirrors the XAF save rules in code (they don't fire on the non-secured
-  tool ObjectSpace): hard errors for missing/duplicate/invalid steps, ≤1 OpenView; soft
-  warnings for unparseable criteria / unknown target entity / 10-slot ceiling. SortOrder
-  from JSON array position. `Enum.IsDefined` guard blocks numeric-string enum bypass.
-- **Tests:** Phase 11 grew 15 → 18 E2E (create-via-chat with DB-row asserts incl. GCRecord
-  soft-delete filter, live button-render on Customer DetailView, toggle+delete with hard
-  purge in Test_99_Cleanup); mock self-tests 5 → 7. All green: 18/18 Phase 11, 7/7 mock,
-  build 0 warnings. Final whole-branch review: ready to merge; its 3 findings fixed
-  (6e95f1f) and re-review-confirmed.
-- **Known gotcha reaffirmed:** the chat UI displays only the LLM's follow-up text, never raw
-  tool results — E2E assertions must target the DB or rendered UI. The pre-existing
-  create_entity mock drift (`class_name` vs `className` — that tool silently errors in
-  mocked runs, tests pass on canned text) is NOT fixed on this branch; candidate follow-up.
-- **Test_16–18 dependency:** `Customer` entity from Phase02 (same precedent as Phase04).
+**TEST-001 — deploy-restart nav race fixed.** Shared `GotoRootToleratingRedirectAsync` in
+`ServerHelper` tolerates the post-restart shortcut-restore navigation aborting the helper's
+root navigation (bounded retry). Covers WaitForDeployRestartAsync + ReloadAndWaitAsync.
 
-### Earlier same day (already merged to master)
-- SEC-002 closed: HtmlSanitizer 9.1.974 (NU1902 gone) + System.Security.Cryptography.Xml
-  10.0.10 override (NU1903, CVE-2026-50648) — zero-warning build (bc430d7).
-- Phase11 Test_10/Test_02 flake root-caused: `AIChatPanel.WaitForResponseAsync` now waits
-  for non-empty text in the last assistant bubble (DxAIChat renders tool_use turns as empty
-  assistant messages while tools execute).
+**TEST-002 — mock create_entity drift fixed.** Mock now sends the real parameter names
+(`className`/`navigationGroup`/`description`/`fieldsJson`); Test_07 asserts the real
+CustomClasses row. Mocked create-entity coverage is genuine for the first time.
 
-## Next Steps
-- Full ~168-test regression running (`Category!=LiveAI`, server via `run-server-mock.bat`);
-  merge to master + close card 1139 after it's green.
-- Backburner: ACT-001 fast-follows remaining — ListView targets, expression values;
-  create_entity mock drift fix.
+### Verification story (important context for future full runs)
+- Regression #2 (pre-fixes): 167/1/1 — the 1 was the TEST-001 race, then fixed.
+- Regression #3 (post-fixes): 163/5/1 — **all 5 failures are cold-start-window artifacts**
+  (first form interactions against a seconds-old server process: P01 T02–05, P03 T01 toast
+  race). Warm standalone reruns: Phase01 11/11, Phase03 9/9, Phase09 19/19. Everything the
+  branch touches (deploy phases, Phase09, Phase11 incl. the new real-DB asserts, Phase12)
+  was green in #3.
+- **Cold-start gotcha:** starting `dotnet test` the instant the server answers HTTP 200
+  invites first-render timeouts in the first test class; the suite also ENDS with a
+  deploy-restart, so a rerun chained immediately after a full run hits a newborn process
+  again. Leave a warm-up gap (or prime a real view) before starting the suite.
+- **Suite-order gotcha (learned via regression #1):** Phase07's cleanup deletes `Customer`
+  and deploys an empty runtime set — runtime entities from early phases do NOT survive to
+  Phase 11. Phase 11's action tests target compiled `SchemaHistory` for exactly this reason.
+
+### Lifecycle
+- Board: cards 1139 (ACT-002), 1140 (TEST-001), 1141 (TEST-002) completed → Review;
+  DONE.md entries written; TODO.md empty.
+- Earlier same session, already on master: SEC-002 closed (HtmlSanitizer 9.1.974 +
+  Crypto.Xml 10.0.10 override, zero-warning build); Phase11 wait-race fix (bc430d7).
 
 ## How to Verify
 ```bash
 dotnet build XafDynamicAssemblies.slnx        # 0 errors, 0 warnings
-run-server-mock.bat                            # mock mode — required for Phase 11 AI-chat tests
+run-server-mock.bat                            # then wait ~30s before starting tests
 dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tests --filter "Category!=LiveAI"
 ```
 
-## Known Issues (unchanged)
+## Known Issues
 - Server MUST be started via `run-server.bat`/`run-server-mock.bat` for deploy+restart (exit 42)
-- Phase04 standalone needs Phase02's `Customer` entity (full-suite order satisfies it)
+- Cold-start sensitivity: see Verification story above
 - Live AI tests report "passed" (early-return) when `AI_TEST_API_KEY` unset — by design
-- After failed test runs with stale state: kill server, clean bad metadata rows, restart
 - EF Core 10612 warning (Employee/Department navigation split) — harmless, accepted
