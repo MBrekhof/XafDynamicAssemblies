@@ -206,12 +206,10 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
     }
 
     /// <summary>
-    /// After AI-assisted creation, verify the entity exists in Custom Class list.
-    ///
-    /// NOTE: This test depends on the AI chat actually executing the create_entity
-    /// tool call against the XAF backend. If the mock server only returns tool_use
-    /// responses without backend integration, this test verifies the tool call
-    /// was generated correctly instead.
+    /// After AI-assisted creation, verify the entity REALLY exists in metadata (TEST-002).
+    /// The DB assertion is the load-bearing check: before the mock's create_entity payload
+    /// was aligned to the tool's real parameter names, the tool errored on every mocked
+    /// confirm and this test still passed on the canned follow-up text alone.
     /// </summary>
     [Fact]
     public async Task Test_07_EntityExistsInMetadata()
@@ -226,14 +224,22 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         await _page.WaitForTimeoutAsync(500);
         await chat.SendMessageAsync("yes", 30_000);
 
-        // The mock server returns a tool_use for create_entity
-        // Check if the response indicates the tool was called
         var responses = await chat.GetAllResponsesAsync();
         var last = responses.Count > 0 ? responses[^1] : "";
-        // The tool result follow-up says "Created the entity"
         var lower = last.ToLowerInvariant();
         Assert.True(lower.Contains("creat") || lower.Contains("entity"),
             $"Expected creation confirmation, got: {last}");
+
+        // The real check: a live CustomClasses row was created by the tool.
+        var rowCount = await PollUntilAsync(() =>
+        {
+            using var conn = DatabaseHelper.GetConnection();
+            using var cmd = new NpgsqlCommand(
+                "SELECT COUNT(*) FROM \"CustomClasses\" WHERE \"ClassName\" = 'ChatTestVerify' " +
+                "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
+            return (long)cmd.ExecuteScalar()!;
+        }, c => c >= 1L);
+        Assert.True(rowCount >= 1, "create_entity should have created a live ChatTestVerify metadata row");
     }
 
     // --- TestEntityModificationFlow: adding fields to entities via chat ---

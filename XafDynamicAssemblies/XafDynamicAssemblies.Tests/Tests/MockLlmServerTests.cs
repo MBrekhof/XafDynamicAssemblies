@@ -94,9 +94,14 @@ public class MockLlmServerTests : IAsyncLifetime
         Assert.Equal("create_entity", block.GetProperty("name").GetString());
         Assert.StartsWith("call_", block.GetProperty("id").GetString());
 
+        // TEST-002: keys must equal the real create_entity tool's C# parameter names —
+        // the old snake_case shape (class_name/fields) made the tool silently fail
+        // server-side in every mocked run while tests passed on canned follow-up text.
         var input = block.GetProperty("input");
-        Assert.Equal("Customer", input.GetProperty("class_name").GetString());
-        Assert.Equal(2, input.GetProperty("fields").GetArrayLength());
+        Assert.Equal("Customer", input.GetProperty("className").GetString());
+        var fields = JsonSerializer.Deserialize<JsonElement>(input.GetProperty("fieldsJson").GetString()!);
+        Assert.Equal(2, fields.GetArrayLength());
+        Assert.Equal("Name", fields[0].GetProperty("name").GetString());
     }
 
     [Fact]

@@ -115,15 +115,19 @@ public class ScriptMatcher
     private Dictionary<string, object> BuildCreate(string text)
     {
         var name = ExtractEntityName(text);
+        // Deviation from scripts.py (TEST-002): the Python shape (class_name/fields/
+        // navigation_group) never matched the real create_entity tool's C# parameter names
+        // (className/navigationGroup/description/fieldsJson), so the tool errored on every
+        // mocked confirm while tests passed on canned follow-up text. Keys below are the
+        // real AIFunction parameter names — same contract the action-verb matchers use.
         _pendingEntity = new Dictionary<string, object>
         {
-            ["class_name"] = name,
-            ["fields"] = new List<Dictionary<string, object>>
-            {
-                new() { ["field_name"] = "Name", ["type_name"] = "System.String" },
-                new() { ["field_name"] = "Description", ["type_name"] = "System.String" },
-            },
-            ["navigation_group"] = "Default",
+            ["className"] = name,
+            ["navigationGroup"] = "Default",
+            ["description"] = "",
+            ["fieldsJson"] =
+                "[{\"name\":\"Name\",\"type\":\"System.String\"}," +
+                "{\"name\":\"Description\",\"type\":\"System.String\"}]",
         };
         return Text(
             $"I'll create a **{name}** entity with these fields:\n" +
