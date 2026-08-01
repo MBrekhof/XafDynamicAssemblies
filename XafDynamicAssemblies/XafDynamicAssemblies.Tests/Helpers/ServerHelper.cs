@@ -42,10 +42,35 @@ public static class ServerHelper
         await page.WaitForTimeoutAsync(5000);      // Let the deploy action process
         await Task.Delay(5000);                    // Server is briefly down during process restart
         await WaitForServerAsync(serverTimeoutSeconds);
-        await page.GotoAsync(TestSettings.BaseUrl,
-            new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
+        await GotoRootToleratingRedirectAsync(page);
         await page.WaitForSelectorAsync(".xaf-nav-link", new() { Timeout = 60_000 });
         await page.WaitForTimeoutAsync(3000);
+    }
+
+    /// <summary>
+    /// Navigate to the app root, tolerating the post-restart auto-redirect race (TEST-001):
+    /// the reconnecting Blazor circuit can fire its own navigation at the same moment (XAF
+    /// restores the last shortcut, e.g. /CustomClass_ListView), aborting ours with
+    /// "Navigation to ... is interrupted by another navigation". That interruption proves the
+    /// app is alive, so wait out the competing navigation and retry; the .xaf-nav-link wait
+    /// that callers do next is the real readiness gate.
+    /// </summary>
+    private static async Task GotoRootToleratingRedirectAsync(IPage page)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await page.GotoAsync(TestSettings.BaseUrl,
+                    new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
+                return;
+            }
+            catch (PlaywrightException ex) when (
+                ex.Message.Contains("interrupted by another navigation") && attempt < 2)
+            {
+                await page.WaitForTimeoutAsync(2000);
+            }
+        }
     }
 
     /// <summary>Click the 'Deploy Schema' toolbar action, then dismiss the confirmation dialog if present.</summary>
@@ -75,8 +100,7 @@ public static class ServerHelper
     public static async Task ReloadAndWaitAsync(IPage page)
     {
         await WaitForServerAsync(30);
-        await page.GotoAsync(TestSettings.BaseUrl,
-            new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
+        await GotoRootToleratingRedirectAsync(page);
         await page.WaitForSelectorAsync(".xaf-nav-link", new() { Timeout = 60_000 });
         await page.WaitForTimeoutAsync(3000);
     }
