@@ -33,6 +33,7 @@ namespace XafDynamicAssemblies.Blazor.Server
             else
             {
                 DevExpress.ExpressApp.FrameworkSettings.DefaultSettingsCompatibilityMode = DevExpress.ExpressApp.FrameworkSettingsCompatibilityMode.Latest;
+                DevExpress.ExpressApp.Security.SecurityStrategy.AutoAssociationReferencePropertyMode = DevExpress.ExpressApp.Security.ReferenceWithoutAssociationPermissionsMode.AllMembers;
 
                 if (ContainsArgument(args, "updateDatabase"))
                 {

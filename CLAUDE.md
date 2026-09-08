@@ -32,6 +32,7 @@ dotnet build XafDynamicAssemblies.slnx -c EasyTest
 - **EF Core provider:** `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3
 - **Blazor Server** (UI)
 - **Docker:** `docker compose up -d` starts PostgreSQL
+- **Security (SEC-004):** XAF integrated security, password auth. Dev login `Admin` / empty password, seeded by `Module/DatabaseUpdate/Updater.cs` in non-Release builds. Web API needs a JWT from `POST /api/Authentication/Authenticate`. New persistent types need `--updateDatabase` once (the exit-42 restart loop never runs the updater). Connection string carries `Persist Security Info=True`: DX's `MARSDbCommandInterceptor` clones connections from the live connection string and Npgsql strips the password otherwise.
 
 ## Architecture
 

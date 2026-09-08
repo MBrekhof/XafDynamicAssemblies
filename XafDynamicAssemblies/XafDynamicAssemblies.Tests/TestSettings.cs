@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace XafDynamicAssemblies.Tests;
 
@@ -31,6 +31,13 @@ public static class TestSettings
 
     public static string DbPassword =>
         Environment.GetEnvironmentVariable("DB_PASS") ?? "xafdynamic";
+
+    // SEC-004: seeded by Module/DatabaseUpdate/Updater.cs in non-RELEASE builds.
+    public static string AdminUser =>
+        Environment.GetEnvironmentVariable("ADMIN_USER") ?? "Admin";
+
+    public static string AdminPassword =>
+        Environment.GetEnvironmentVariable("ADMIN_PASSWORD") ?? "";
 
     public static string? AiTestApiKey =>
         Environment.GetEnvironmentVariable("AI_TEST_API_KEY");

@@ -572,7 +572,7 @@ Runtime entities can be exposed as OData v4 REST endpoints using XAF's built-in 
 
 ### Architecture
 
-The Web API uses the same XAF Object Space as the Blazor UI — security, validation, and soft-delete all apply automatically. No custom controllers needed.
+The Web API uses the same XAF Object Space as the Blazor UI, so validation and soft-delete apply automatically, and since SEC-004 (2026-09-08) so does security: XAF's `GenericControllerFeatureProvider` picks `DataController` (with `[Authorize]`) because integrated security is configured, and `Startup.cs` sets the default authorization policy to the JWT bearer scheme. `JwtTokenProviderService` + `AuthenticationController` (`API/Security/`) issue the token. Before SEC-004 the app had no security at all and DX silently selected `NonSecuredDataController`, so every OData endpoint was anonymous. No custom data controllers needed.
 
 ```
 Startup.ConfigureServices()

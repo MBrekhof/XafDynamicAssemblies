@@ -1,10 +1,9 @@
-﻿using DevExpress.Data.Filtering;
 using DevExpress.ExpressApp;
-using DevExpress.ExpressApp.EF;
+using DevExpress.ExpressApp.Security;
 using DevExpress.ExpressApp.Updating;
-using DevExpress.Persistent.Base;
-using DevExpress.Persistent.BaseImpl.EF;
+using DevExpress.Persistent.BaseImpl.EF.PermissionPolicy;
 using Microsoft.Extensions.DependencyInjection;
+using XafDynamicAssemblies.Module.BusinessObjects;
 
 namespace XafDynamicAssemblies.Module.DatabaseUpdate
 {
@@ -18,14 +17,31 @@ namespace XafDynamicAssemblies.Module.DatabaseUpdate
         public override void UpdateDatabaseAfterUpdateSchema()
         {
             base.UpdateDatabaseAfterUpdateSchema();
-            //string name = "MyName";
-            //EntityObject1 theObject = ObjectSpace.FirstOrDefault<EntityObject1>(u => u.Name == name);
-            //if(theObject == null) {
-            //    theObject = ObjectSpace.CreateObject<EntityObject1>();
-            //    theObject.Name = name;
-            //}
 
-            //ObjectSpace.CommitChanges(); //Uncomment this line to persist created object(s).
+            // SEC-004: seed the administrative role and a dev Admin user. Same shape as the
+            // DX 26.1 template: dev/test builds get a known login; a RELEASE build seeds
+            // nothing, so a production database must get its first user from a deliberate
+            // step (https://docs.devexpress.com/eXpressAppFramework/119064).
+#if !RELEASE
+            var adminRole = ObjectSpace.FirstOrDefault<PermissionPolicyRole>(r => r.Name == "Administrators");
+            if (adminRole == null)
+            {
+                adminRole = ObjectSpace.CreateObject<PermissionPolicyRole>();
+                adminRole.Name = "Administrators";
+                adminRole.IsAdministrative = true;
+            }
+            ObjectSpace.CommitChanges();
+
+            var userManager = ObjectSpace.ServiceProvider.GetRequiredService<UserManager>();
+            if (userManager.FindUserByName<ApplicationUser>(ObjectSpace, "Admin") == null)
+            {
+                _ = userManager.CreateUser<ApplicationUser>(ObjectSpace, "Admin", "", user =>
+                {
+                    user.Roles.Add(adminRole);
+                });
+            }
+            ObjectSpace.CommitChanges();
+#endif
         }
         public override void UpdateDatabaseBeforeUpdateSchema()
         {

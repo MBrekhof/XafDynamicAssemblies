@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Npgsql;
@@ -41,7 +41,13 @@ public class Phase10_WebApiTests : IAsyncLifetime
 
     public Phase10_WebApiTests(BrowserFixture fixture) => _fixture = fixture;
 
-    public async Task InitializeAsync() => _page = await _fixture.NewPageAsync();
+    public async Task InitializeAsync()
+    {
+        _page = await _fixture.NewPageAsync();
+        // SEC-004: OData is behind JWT now; a fresh token per test also survives the
+        // deploy-restarts this phase triggers.
+        await ServerHelper.AuthenticateHttpClientAsync(Http);
+    }
 
     public async Task DisposeAsync() => await _page.Context.DisposeAsync();
 

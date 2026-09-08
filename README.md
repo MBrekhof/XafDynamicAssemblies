@@ -69,7 +69,22 @@ dotnet run --project XafDynamicAssemblies/XafDynamicAssemblies.Blazor.Server \
 ./run-server.sh           # Linux/macOS
 ```
 
-Open https://localhost:5001 in your browser.
+Open https://localhost:5001 in your browser and log in as **Admin** with an empty password
+(seeded by the database updater in Debug/EasyTest builds; a Release build seeds no users, so a
+production database gets its first user from a deliberate step).
+
+### Security
+
+The app uses XAF's integrated security with password authentication (SEC-004). The Blazor UI
+requires a login; the OData Web API requires a JWT bearer token obtained from
+`POST /api/Authentication/Authenticate` with `{ "userName": "Admin", "password": "" }`.
+Anonymous OData requests get 401. The AI schema tools deliberately run on a non-secured
+Object Space (they act as the server, not as the caller); see AI-001 on the board for the
+validation gap that implies.
+
+Adding new persistent types (users, roles) means the schema updater must run once:
+`--updateDatabase` as in step 3 above, or an F5 run with the debugger attached. The exit-42
+restart loop does not run it.
 
 ### Process Restart
 
@@ -151,6 +166,9 @@ Runtime entities can be exposed as OData REST endpoints:
 - **Swagger UI** at `/swagger` (development mode)
 
 Metadata entities (`CustomClass`, `CustomField`) are always exposed. Runtime entities are opt-in via the `IsApiExposed` flag.
+
+Every endpoint requires `Authorization: Bearer <token>`; get the token from
+`POST /api/Authentication/Authenticate`. Swagger UI has an Authorize button for it.
 
 ### AI Schema Assistant
 
@@ -336,6 +354,8 @@ AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tes
 | `SLOW_MO` | `0` | Slow down for debugging (ms) |
 | `MOCK_LLM_PORT` | `5555` | Port the mock LLM server listens on (must match `run-server-mock.bat`) |
 | `AI_TEST_API_KEY` | (none) | API key for live AI tests (Phase 11 Live, `Category=LiveAI`); tests skipped if unset |
+| `ADMIN_USER` | `Admin` | XAF login the suite uses (browser fixture + Web API bearer token) |
+| `ADMIN_PASSWORD` | (empty) | Password for `ADMIN_USER` |
 
 ## Database
 

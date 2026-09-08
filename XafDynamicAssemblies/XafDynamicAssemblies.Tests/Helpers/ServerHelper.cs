@@ -1,3 +1,7 @@
+﻿using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using XafDynamicAssemblies.Tests.Pages;
+
 namespace XafDynamicAssemblies.Tests.Helpers;
 
 /// <summary>
@@ -43,8 +47,23 @@ public static class ServerHelper
         await Task.Delay(5000);                    // Server is briefly down during process restart
         await WaitForServerAsync(serverTimeoutSeconds);
         await GotoRootToleratingRedirectAsync(page);
+        await new LoginPage(page).EnsureLoggedInAsync();
         await page.WaitForSelectorAsync(".xaf-nav-link", new() { Timeout = 60_000 });
         await page.WaitForTimeoutAsync(3000);
+    }
+
+    /// <summary>
+    /// SEC-004: obtain a Web API bearer token for the seeded Admin user via
+    /// POST /api/Authentication/Authenticate and install it on <paramref name="client"/>.
+    /// </summary>
+    public static async Task AuthenticateHttpClientAsync(HttpClient client)
+    {
+        using var response = await client.PostAsJsonAsync(
+            $"{TestSettings.BaseUrl}/api/Authentication/Authenticate",
+            new { userName = TestSettings.AdminUser, password = TestSettings.AdminPassword });
+        response.EnsureSuccessStatusCode();
+        var token = (await response.Content.ReadAsStringAsync()).Trim('"');
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
     /// <summary>
@@ -101,6 +120,7 @@ public static class ServerHelper
     {
         await WaitForServerAsync(30);
         await GotoRootToleratingRedirectAsync(page);
+        await new LoginPage(page).EnsureLoggedInAsync();
         await page.WaitForSelectorAsync(".xaf-nav-link", new() { Timeout = 60_000 });
         await page.WaitForTimeoutAsync(3000);
     }

@@ -20,6 +20,9 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         public DbSet<DashboardData> DashboardData { get; set; }
         public DbSet<Event> Events { get; set; }
         public DbSet<HCategory> HCategories { get; set; }
+        public DbSet<PermissionPolicyRole> Roles { get; set; }
+        public DbSet<ApplicationUser> Users { get; set; }
+        public DbSet<ApplicationUserLoginInfo> UserLoginsInfo { get; set; }
 
         public DbSet<CustomClass> CustomClasses { get; set; }
         public DbSet<CustomField> CustomFields { get; set; }
@@ -67,6 +70,10 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
             modelBuilder.SetOneToManyAssociationDeleteBehavior(DeleteBehavior.SetNull, DeleteBehavior.Cascade);
             modelBuilder.HasChangeTrackingStrategy(ChangeTrackingStrategy.ChangingAndChangedNotificationsWithOriginalValues);
             modelBuilder.UsePropertyAccessMode(PropertyAccessMode.PreferFieldDuringConstruction);
+            modelBuilder.Entity<ApplicationUserLoginInfo>(b =>
+            {
+                b.HasIndex(nameof(DevExpress.ExpressApp.Security.ISecurityUserLoginInfo.LoginProviderName), nameof(DevExpress.ExpressApp.Security.ISecurityUserLoginInfo.ProviderUserKey)).IsUnique();
+            });
 
             // CustomClass configuration
             modelBuilder.Entity<CustomClass>(entity =>

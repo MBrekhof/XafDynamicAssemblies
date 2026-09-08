@@ -1,3 +1,5 @@
+﻿using XafDynamicAssemblies.Tests.Pages;
+
 namespace XafDynamicAssemblies.Tests.Fixtures;
 
 public class BrowserFixture : IAsyncLifetime
@@ -38,6 +40,7 @@ public class BrowserFixture : IAsyncLifetime
 
         var page = await context.NewPageAsync();
         await page.GotoAsync(TestSettings.BaseUrl, new() { WaitUntil = WaitUntilState.NetworkIdle });
+        await new LoginPage(page).EnsureLoggedInAsync(); // SEC-004: fresh context has no auth cookie
         await page.WaitForSelectorAsync(".xaf-nav-link", new() { Timeout = 60_000 });
         await page.WaitForTimeoutAsync(2000); // Roslyn cold start buffer
         return page;
