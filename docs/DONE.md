@@ -1,5 +1,20 @@
 # DONE — XafDynamicAssemblies
 
+#### SEC-004: No authentication anywhere; OData metadata CRUD and exposed entities are anonymous (ID: 1555)
+
+**Completed: 2026-09-08, commit 71bd193.** Decision: real security (option a), "nobody should
+deploy without security". Wired the DX 26.1 template shape from a fresh Template Kit app
+(`C:\Projects\dxapplication2`): `AddSecuredEFCore`, `builder.Security.UseIntegratedMode` +
+password auth, cookie + JWT bearer, `ApplicationUser`/`ApplicationUserLoginInfo`, Updater seeds
+Administrators + Admin (empty password, non-Release), `JwtTokenProviderService` +
+`POST /api/Authentication/Authenticate`. Two non-obvious findings: (1) Npgsql needs
+`Persist Security Info=True` because DX's `MARSDbCommandInterceptor` clones connections from the
+live connection string during permission prefetch; (2) the exit-42 restart loop never runs the
+XAF updater, so new persistent types need `--updateDatabase` once. Tests: `LoginPage` page object,
+fixture/helper login, Phase10 bearer token. Verified anonymous OData 401 / bearer 200, UI login,
+cookie survives restart, full regression 168/168. Re-evaluation of the remaining Codex cards
+against the secured app is the next step; AI-004 moved to P2 as a consequence.
+
 #### ACT-002: AI-chat action verbs — 4 tools for metadata actions (ID: 1139)
 
 **Completed: 2026-08-01.** The AI schema assistant now manages metadata actions (ACT-001's

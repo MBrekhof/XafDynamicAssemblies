@@ -15,17 +15,6 @@ Source: Codex full-repo review 2026-09-08 (27 findings), each verified against t
 
 **Fix:** Validate at the one point every write path converges on: in `RuntimeAssemblyBuilder.GenerateSource` throw if `ClassName`, any `FieldName` or `ReferencedClassName` fails `CustomClassValidation.IsValidIdentifier`, or a non-reference `TypeName` fails `SupportedTypes.IsSupported`; replace the `_ => typeName` fallthrough with a throw. The orchestrator already treats a throw as a failed compile. Add a `RuleFromBoolProperty` on `ReferencedClassName` so the UI reports it early, and swap `EscapeString` for Roslyn's `SymbolDisplay.FormatLiteral(s, quote: true)`.
 
-#### SEC-004: No authentication anywhere; OData metadata CRUD and exposed entities are anonymous (ID: 1555)
-
-**Codex (Critical):** `Startup.cs:129` registers `CustomClass`/`CustomField` (plus every `IsApiExposed` type) on the Web API with no authentication or XAF security; DX picks `NonSecuredDataController`.
-
-**Assessment: CONFIRMED by omission. High as the repo stands (localhost dev app), Critical the moment it is bound to a non-loopback interface, because with SEC-003 an anonymous OData POST to CustomField plus one Deploy is code execution.**
-- No `builder.Security`, `AddAuthentication`, `UseAuthentication`/`UseAuthorization` anywhere in the solution; the Blazor UI has no logon page either.
-- DX 26.1 `GenericControllerFeatureProvider.cs:78-81`: `IsXafSecured()` false → `NonSecuredDataController<,>`, which carries no `[Authorize]`.
-- Docs are wrong, not silent: `UNDER_THE_HOOD.md:575` claims "security, validation, and soft-delete all apply automatically" for the Web API. README never mentions auth. No deployment target exists for this repo.
-
-**Fix:** Decide which one: (a) wire XAF security per the DX template (`builder.Security.UseIntegratedMode(...).UsePasswordAuthentication()`, cookie auth, `UseAuthentication/UseAuthorization` before `UseXaf`), which also makes the AI role tools meaningful (see AI-004); or (b) keep anonymous-by-design and say so in README ("no authentication; bind to localhost only") and correct `UNDER_THE_HOOD.md:575`. Smallest correct change is (b); (a) is the real fix.
-
 ## P1: High
 
 #### AI-001: create_entity/modify_entity commit metadata without identifier/type validation; one bad row degrades every runtime entity (ID: 1560)
@@ -134,6 +123,17 @@ Source: Codex full-repo review 2026-09-08 (27 findings), each verified against t
 - `ShouldHandle` (`:259-274`) returns true only for `TaskCanceledException`/`OperationCanceledException` (line 266) and `HttpRequestException` with 429/5xx; the comment "Retry timeouts" at `:265` only covers HttpClient's own timeout.
 
 **Fix:** Change line 266 to `if (ex is TaskCanceledException or OperationCanceledException or Polly.Timeout.TimeoutRejectedException) return true;`. The retry-outer/timeout-inner ordering is already correct for per-attempt timeouts.
+
+#### AI-004: set_role_permissions reflects for an instance method that is a static extension; can never succeed (ID: 1580)
+
+**Codex (Low):** `SchemaAIToolsProvider.cs:812`. The tool searches instance methods for a two-parameter method although DX exposes a static extension, and invokes with three arguments. Latent because security is not enabled.
+
+**Assessment: CONFIRMED, Medium now that SEC-004 (71bd193) wired security: the LLM is offered a `set_role_permissions` tool that always fails.**
+- `:812-813` looks for `roleType.GetMethods()` named `AddTypePermissionsRecursively` with 2 parameters, then `:832/:842` invoke it with three arguments (`targetType, operationsStr, allowState`): self-contradictory before checking DX.
+- DX 26.1 `PermissionSettingHelper.cs:52-53, 184-195`: `AddTypePermissionsRecursively` is a static extension on `public static class PermissionSettingHelper` in `DevExpress.ExpressApp.Security`, signature `(this IPermissionPolicyRole role, Type targetType, string operations, SecurityPermissionState? state, ITypesInfo typesInfo = null)`. `GetMethods()` on the role type never returns it.
+- Neither csproj references `DevExpress.ExpressApp.Security`, so today `roleType` resolves to null (`:747-753`) and the tool reports "Security module is not configured" one step earlier.
+
+**Fix:** Reference `DevExpress.ExpressApp.Security` 26.1.3 in `Module.csproj` and replace the reflection block at `:810-848` with a direct call: cast `role` to `IPermissionPolicyRole` and call `role.AddTypePermissionsRecursively(targetType, operationsStr, SecurityPermissionState.Allow)` / `Deny`. SEC-004 chose option (a), so fix the tool (or drop it if role management via chat is not wanted).
 
 #### TEST-004: Phase04 depends on Phase02's Customer with no class ordering; works by file-name coincidence (ID: 1569)
 
@@ -280,16 +280,5 @@ Source: Codex full-repo review 2026-09-08 (27 findings), each verified against t
 - Every re-activation (Active BoolList toggle, frame re-setting the view) stacks another handler and the toast fires N times. The handlers hang off the View/CollectionSource so they die with the view: duplicate firing plus controller-to-view retention, not a process-wide leak.
 
 **Fix:** In both classes replace the lambdas with named methods and add `protected override void OnDeactivated() { View.CurrentObjectChanged -= View_CurrentObjectChanged; base.OnDeactivated(); }` (respectively `View.CollectionSource.CollectionChanged -= ...`). Standard `xaf-viewcontroller-patterns` shape.
-
-#### AI-004: set_role_permissions reflects for an instance method that is a static extension; can never succeed (ID: 1580)
-
-**Codex (Low):** `SchemaAIToolsProvider.cs:812`. The tool searches instance methods for a two-parameter method although DX exposes a static extension, and invokes with three arguments. Latent because security is not enabled.
-
-**Assessment: CONFIRMED, Low today, Medium the moment SEC-004 wires security, since the LLM is offered a tool that always fails.**
-- `:812-813` looks for `roleType.GetMethods()` named `AddTypePermissionsRecursively` with 2 parameters, then `:832/:842` invoke it with three arguments (`targetType, operationsStr, allowState`): self-contradictory before checking DX.
-- DX 26.1 `PermissionSettingHelper.cs:52-53, 184-195`: `AddTypePermissionsRecursively` is a static extension on `public static class PermissionSettingHelper` in `DevExpress.ExpressApp.Security`, signature `(this IPermissionPolicyRole role, Type targetType, string operations, SecurityPermissionState? state, ITypesInfo typesInfo = null)`. `GetMethods()` on the role type never returns it.
-- Neither csproj references `DevExpress.ExpressApp.Security`, so today `roleType` resolves to null (`:747-753`) and the tool reports "Security module is not configured" one step earlier.
-
-**Fix:** Reference `DevExpress.ExpressApp.Security` 26.1.3 in `Module.csproj` and replace the reflection block at `:810-848` with a direct call: cast `role` to `IPermissionPolicyRole` and call `role.AddTypePermissionsRecursively(targetType, operationsStr, SecurityPermissionState.Allow)` / `Deny`. Do together with SEC-004 option (a), or delete the tool if option (b) is chosen.
 
 (Completed work: see `docs/DONE.md`. Future ideas: `BACKBURNER.md`.)
