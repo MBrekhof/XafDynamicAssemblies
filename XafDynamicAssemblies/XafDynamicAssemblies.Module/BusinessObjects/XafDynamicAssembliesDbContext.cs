@@ -43,6 +43,9 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
             get => _runtimeEntityTypes;
             set
             {
+                // PERF-001: every Blazor circuit's module Setup reassigns the same array; only a
+                // real change may invalidate EF's model cache (a rebuild per circuit otherwise).
+                if (ReferenceEquals(_runtimeEntityTypes, value)) return;
                 _runtimeEntityTypes = value;
                 Interlocked.Increment(ref _modelVersion);
             }

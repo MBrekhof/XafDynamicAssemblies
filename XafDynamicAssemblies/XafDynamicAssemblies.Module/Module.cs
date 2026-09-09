@@ -228,6 +228,18 @@ namespace XafDynamicAssemblies.Module
 
         private void BootstrapRuntimeEntities(XafApplication application)
         {
+            // PERF-001: XAF creates a module instance per XafApplication, i.e. per Blazor circuit.
+            // Metadata query, DDL sync and compilation are process-wide work done once; a later
+            // circuit only needs its own AdditionalExportedTypes filled from the loaded assembly.
+            if (AssemblyManager.HasLoadedAssembly && AssemblyManager.RuntimeTypes.Length > 0)
+            {
+                var loaded = AssemblyManager.RuntimeTypes;
+                XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = loaded; // same instance: no ModelVersion bump
+                RefreshRuntimeTypes(loaded);
+                SchemaChangeOrchestrator.Instance.SetKnownTypeNames(loaded.Select(t => t.Name));
+                return;
+            }
+
             DegradedMode = false;
             DegradedModeReason = null;
 
