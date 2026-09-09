@@ -16,6 +16,13 @@ public static class DatabaseHelper
 {
     public static NpgsqlConnection GetConnection()
     {
+        // TEST-003: the suite runs DELETE/DROP TABLE against this database by design (E2E shares
+        // the app's DB). Refuse anything that is not the local docker throwaway.
+        var host = TestSettings.DbHost;
+        if (!(host is "localhost" or "127.0.0.1" or "::1") || TestSettings.DbName != "XafDynamicAssemblies")
+            throw new InvalidOperationException(
+                $"Refusing destructive test SQL against {host}/{TestSettings.DbName}: the suite only runs against the local docker database (localhost / XafDynamicAssemblies).");
+
         var connStr = $"Host={TestSettings.DbHost};Port={TestSettings.DbPort};" +
                       $"Database={TestSettings.DbName};Username={TestSettings.DbUser};" +
                       $"Password={TestSettings.DbPassword}";
