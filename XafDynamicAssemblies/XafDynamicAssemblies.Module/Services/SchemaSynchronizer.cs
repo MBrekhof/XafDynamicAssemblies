@@ -27,10 +27,23 @@ namespace XafDynamicAssemblies.Module.Services
             using var conn = new NpgsqlConnection(_connectionString);
             conn.Open();
 
+            // DATA-003: one bad class must not block the rest; report all failures at the end.
+            var failures = new List<string>();
             foreach (var cc in classes)
             {
-                SynchronizeTable(conn, cc);
+                try
+                {
+                    SynchronizeTable(conn, cc);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "DDL sync failed for {ClassName}", cc.ClassName);
+                    failures.Add($"{cc.ClassName}: {ex.Message}");
+                }
             }
+
+            if (failures.Count > 0)
+                throw new InvalidOperationException($"DDL sync failed for {failures.Count} class(es): {string.Join(" | ", failures)}");
         }
 
         private void SynchronizeTable(NpgsqlConnection conn, CustomClass cc)
@@ -95,6 +108,13 @@ namespace XafDynamicAssemblies.Module.Services
                     var fkColName = field.FieldName + "Id";
                     if (!existingColumns.Contains(fkColName))
                     {
+                        // DATA-003: a NOT NULL uuid column has no sensible default, and adding it NULL
+                        // would leave rows EF cannot materialize into the non-nullable Guid property.
+                        // Refuse on a populated table; the error aborts the deploy with a clear message.
+                        if (field.IsRequired && RowCount(conn, cc.ClassName) is var rows && rows > 0)
+                            throw new InvalidOperationException(
+                                $"Cannot add required reference '{field.FieldName}' to '{cc.ClassName}' with {rows} existing row(s). " +
+                                "Add it as optional, backfill the references, then make it required.");
                         var nullable = field.IsRequired ? "NOT NULL" : "NULL";
                         var sql = $"ALTER TABLE {tableName} ADD COLUMN {QuoteIdentifier(fkColName)} uuid {nullable}";
                         _logger?.LogInformation("Adding FK column: {TableName}.{ColumnName}", cc.ClassName, fkColName);
@@ -171,6 +191,12 @@ namespace XafDynamicAssemblies.Module.Services
         {
             return !string.IsNullOrWhiteSpace(field.ReferencedClassName)
                 && (field.TypeName == "Reference" || string.IsNullOrWhiteSpace(field.TypeName));
+        }
+
+        private static long RowCount(NpgsqlConnection conn, string tableName)
+        {
+            using var cmd = new NpgsqlCommand($"SELECT COUNT(*) FROM {QuoteIdentifier(tableName)}", conn);
+            return (long)cmd.ExecuteScalar();
         }
 
         private bool TableExists(NpgsqlConnection conn, string tableName)

@@ -75,22 +75,29 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
     // --- TestDegradedMode: compilation errors cause graceful degraded mode ---
 
     /// <summary>
-    /// Insert a class with invalid TypeName, deploy, verify server starts in degraded mode.
-    /// The server should still boot with compiled entities working (CustomClass, CustomField).
+    /// Insert a class with invalid TypeName and deploy. DATA-003: the DDL sync rejects the type,
+    /// the deploy is aborted with an error toast and NO restart happens; the server keeps
+    /// serving compiled entities (CustomClass, CustomField). (Before DATA-003 the failure was
+    /// swallowed and the process restarted into degraded mode.)
     /// </summary>
     [Fact]
-    public async Task Test_01_InvalidTypenameDegradesGracefully()
+    public async Task Test_01_InvalidTypenameAbortsDeployWithMessage()
     {
-        // Create a class with an invalid type that will cause compilation failure
+        // Create a class with an invalid type that will fail DDL sync and compilation
         CreateClassViaDb("BadTypeClass", "ErrorTest", "Class with invalid field type");
         DatabaseHelper.InsertFieldViaDb("BadTypeClass", "BadField", "Totally.Invalid.Type.That.Does.Not.Exist");
 
-        // Deploy — this will trigger compilation which should fail for the invalid type
         await NavToCustomClassAsync();
         await ServerHelper.ClickDeploySchemaAsync(_page);
-        await ServerHelper.WaitForDeployRestartAsync(_page);
 
-        // Server should be up in degraded mode — compiled entities still work
+        // The Deploy action awaits the orchestrator and shows the DDL error as an XAF toast
+        var alertText = _page.Locator("[role='alert'] .xaf-alert-message");
+        await alertText.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 30_000 });
+        var message = await alertText.First.InnerTextAsync();
+        Assert.Contains("Deploy aborted", message);
+        Assert.Contains("BadTypeClass", message);
+
+        // Same process, still alive — compiled entities still work
         var nav = new NavigationPage(_page);
         await nav.NavigateToAsync("Schema Management", "Custom Class");
         var lv = new ListViewPage(_page);

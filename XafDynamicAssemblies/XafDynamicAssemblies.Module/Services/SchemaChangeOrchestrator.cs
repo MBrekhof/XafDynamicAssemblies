@@ -42,24 +42,30 @@ namespace XafDynamicAssemblies.Module.Services
             _previousTypeNames = new HashSet<string>(typeNames);
         }
 
-        public async Task ExecuteHotLoadAsync()
+        /// <summary>
+        /// Runs DDL sync, compile and restart scheduling. Returns null on success, otherwise the
+        /// error to show the user. A DDL failure stops the deploy: nothing is compiled and no restart
+        /// is scheduled, because a restarted process would carry an EF model whose columns the
+        /// table lacks (DATA-003).
+        /// </summary>
+        public async Task<string> ExecuteHotLoadAsync()
         {
             if (!await _semaphore.WaitAsync(TimeSpan.FromSeconds(30)))
             {
                 Tracing.Tracer.LogError("Hot-load timed out waiting for semaphore.");
-                return;
+                return "Deploy is already running; try again in a moment.";
             }
 
             try
             {
                 var connStr = XafDynamicAssembliesModule.RuntimeConnectionString;
                 if (string.IsNullOrEmpty(connStr))
-                    return;
+                    return "No runtime connection string configured.";
 
                 // 1. Query current metadata
                 var classes = XafDynamicAssembliesModule.QueryMetadata(connStr);
 
-                // 2. Synchronize DDL (safe even if compilation fails — extra columns are harmless)
+                // 2. Synchronize DDL — a failure aborts the deploy (see summary)
                 try
                 {
                     var syncer = new SchemaSynchronizer(connStr);
@@ -67,8 +73,8 @@ namespace XafDynamicAssemblies.Module.Services
                 }
                 catch (Exception ddlEx)
                 {
-                    Tracing.Tracer.LogError($"DDL sync failed (non-fatal): {ddlEx.Message}");
-                    // Continue — compilation may still succeed for existing tables
+                    Tracing.Tracer.LogError($"Deploy aborted, DDL sync failed: {ddlEx.Message}");
+                    return $"Deploy aborted, schema synchronization failed: {ddlEx.Message}";
                 }
 
                 if (classes.Count == 0)
@@ -79,7 +85,7 @@ namespace XafDynamicAssemblies.Module.Services
                     RestartNeeded = hadTypes;
                     var ver = Interlocked.Increment(ref _schemaVersion);
                     SchemaChanged?.Invoke(ver);
-                    return;
+                    return null;
                 }
 
                 // 3. Compile via Roslyn
@@ -93,7 +99,7 @@ namespace XafDynamicAssemblies.Module.Services
                     RestartNeeded = true;
                     var ver = Interlocked.Increment(ref _schemaVersion);
                     SchemaChanged?.Invoke(ver);
-                    return;
+                    return "Compilation failed: " + string.Join("; ", result.Errors.Take(3));
                 }
 
                 // 4. Update DbContext types (atomic reference swap)
@@ -115,6 +121,7 @@ namespace XafDynamicAssemblies.Module.Services
                 // 8. Notify (Startup.cs wires this to SignalR broadcast + conditional restart)
                 var version = Interlocked.Increment(ref _schemaVersion);
                 SchemaChanged?.Invoke(version);
+                return null;
             }
             catch (Exception ex)
             {
@@ -122,6 +129,7 @@ namespace XafDynamicAssemblies.Module.Services
                 // Trigger restart to recover cleanly
                 RestartNeeded = true;
                 SchemaChanged?.Invoke(Interlocked.Increment(ref _schemaVersion));
+                return "Deploy failed: " + ex.Message;
             }
             finally
             {
