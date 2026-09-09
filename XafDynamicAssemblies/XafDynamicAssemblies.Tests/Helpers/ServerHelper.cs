@@ -43,8 +43,18 @@ public static class ServerHelper
     /// </summary>
     public static async Task WaitForDeployRestartAsync(IPage page, int serverTimeoutSeconds = 60)
     {
-        await page.WaitForTimeoutAsync(5000);      // Let the deploy action process
-        await Task.Delay(5000);                    // Server is briefly down during process restart
+        // TEST-005: wait until a NEW process answers, i.e. /_instance differs from the value
+        // captured by ClickDeploySchemaAsync. The old fixed sleeps passed against the old
+        // process whenever DDL + Roslyn took longer than ~7 s (the "cold-start artifacts").
+        var deadline = DateTime.UtcNow.AddSeconds(serverTimeoutSeconds);
+        while (true)
+        {
+            var now = await GetInstanceIdAsync();
+            if (now != null && now != _instanceBeforeDeploy) break;
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException($"Server did not restart within {serverTimeoutSeconds}s (instance still {now ?? "unreachable"})");
+            await Task.Delay(1000);
+        }
         await WaitForServerAsync(serverTimeoutSeconds);
         await GotoRootToleratingRedirectAsync(page);
         await new LoginPage(page).EnsureLoggedInAsync();
@@ -93,8 +103,25 @@ public static class ServerHelper
     }
 
     /// <summary>Click the 'Deploy Schema' toolbar action, then dismiss the confirmation dialog if present.</summary>
+    private static string? _instanceBeforeDeploy;
+
+    /// <summary>GET /_instance (Startup.cs); null while the server is down or restarting.</summary>
+    public static async Task<string?> GetInstanceIdAsync()
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var response = await Http.GetAsync($"{TestSettings.BaseUrl}/_instance", cts.Token);
+            if (!response.IsSuccessStatusCode) return null;
+            var id = (await response.Content.ReadAsStringAsync(cts.Token)).Trim().Trim('"');
+            return string.IsNullOrEmpty(id) ? null : id;
+        }
+        catch { return null; }
+    }
+
     public static async Task ClickDeploySchemaAsync(IPage page)
     {
+        _instanceBeforeDeploy = await GetInstanceIdAsync();
         // data-action-name holds the Action's rendered Caption ("Deploy Schema" —
         // SchemaChangeController.cs), not its Id ("DeploySchema"). See BasePage.cs
         // ActionButtonSelector remarks for the DX 26.1 source citation. Text-based locator

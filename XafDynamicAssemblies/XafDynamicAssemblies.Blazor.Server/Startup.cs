@@ -27,6 +27,9 @@ namespace XafDynamicAssemblies.Blazor.Server
 {
     public class Startup
     {
+        /// <summary>Identifies this process instance; served at /_instance (see UseEndpoints).</summary>
+        private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -263,6 +266,9 @@ namespace XafDynamicAssemblies.Blazor.Server
                 endpoints.MapBlazorHub();
                 endpoints.MapHub<SchemaUpdateHub>("/schemaUpdateHub");
                 endpoints.MapControllers();
+                // TEST-005: per-process marker so a deploy/restart wait can observe that a NEW
+                // process answers (readiness by "HTTP < 500" alone passed against the old one).
+                endpoints.MapGet("/_instance", () => InstanceId).AllowAnonymous();
                 endpoints.MapFallbackToPage("/_Host");
             });
 
