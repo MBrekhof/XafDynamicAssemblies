@@ -87,6 +87,10 @@ namespace XafDynamicAssemblies.Blazor.Server
                     .AddSecuredEFCore(options =>
                     {
                         options.PreFetchReferenceProperties();
+                        // DATA-002: the XAF updater (debugger / --updateDatabase) must be add-only like
+                        // SchemaSynchronizer; without this it emits DropColumnOperation for a deleted
+                        // runtime field and destroys the column's data on the next F5.
+                        options.SchemaUpdateOptions.DisableAlterAndDeleteOperations = true;
                     })
                     .WithDbContext<XafDynamicAssemblies.Module.BusinessObjects.XafDynamicAssembliesEFCoreDbContext>((serviceProvider, options) =>
                     {

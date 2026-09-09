@@ -6,7 +6,9 @@ namespace XafDynamicAssemblies.Module.Services
 {
     /// <summary>
     /// Executes PostgreSQL DDL to create/alter tables for runtime entities.
-    /// Never drops columns — only adds.
+    /// Never drops columns — only adds. The XAF database updater is configured to match
+    /// (Startup.cs: SchemaUpdateOptions.DisableAlterAndDeleteOperations, DATA-002), so a
+    /// deleted runtime field leaves its column and data in place on every path.
     /// </summary>
     public class SchemaSynchronizer
     {
