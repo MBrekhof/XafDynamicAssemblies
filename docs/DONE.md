@@ -1,5 +1,18 @@
 # DONE — XafDynamicAssemblies
 
+#### DATA-007: Startup guard drops metadata fields whose TypeName or FK target disagrees with the live column (ID: 1598)
+
+**Completed: 2026-09-10, commit 208c31c (branch fix/codex-review-2026-09).** `Module/Validation/SchemaGuard.cs`:
+pure `FindMismatch` + `Sanitize` (two catalog queries scoped to `public`, per-field probe isolation, missing
+target tables skipped), called from `QueryMetadata` before Roslyn; `SkippedFieldWarnings` reset on every query
+and in `ResetForRestart`, appended to `validate_schema` output. Three deviations from the card, each agreed with
+Codex: "uuid + data + no FK" counts only *dangling* ids (NULLs and valid ids satisfy an FK; any-data would drop
+healthy fields); an FK retarget is judged only when the referenced class is a runtime table (a compiled target's
+table is whatever the DbContext maps, e.g. `CustomClasses`); a column type outside the guard's vocabulary
+(`date`, `money`) passes. Limitation recorded in the class comment: a skipped required reference leaves its
+NOT NULL column without a default, so reads recover while inserts still fail. 15 unit tests; Phase07
+Test_04b flips a deployed field's TypeName via SQL, deploys and asserts the ListView loads without that column.
+
 #### DATA-003: Required-column ADD COLUMN fails on populated tables and the orchestrator deploys anyway (ID: 1561)
 
 **Completed: 2026-09-10, commit 02ed2b0 (branch fix/codex-review-2026-09).** SchemaSynchronizer isolates each class (aggregated failure message), `byte[]` default is `'\x'::bytea`, and a required reference on a populated table is refused with a clear message: Codex's diff review showed that "add as NULL" (the card's own fix) would leave rows EF cannot materialize into the non-nullable Guid, breaking reads. `ExecuteHotLoadAsync` returns the error and stops after a DDL failure (no compile, no RestartNeeded, no exit-42); `SchemaChangeController` awaits it (documented XAF Blazor `async void` Execute shape, dxdocs 404738) and shows an XAF error toast. Phase07 Test_01 rewritten to assert the toast; Phase05 + Phase07 green.

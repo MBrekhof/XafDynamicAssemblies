@@ -27,9 +27,10 @@ The entire cycle takes seconds. No developer intervention required.
 - **AI Schema Assistant** — conversational AI for entity CRUD and metadata actions via natural language (LLMTornado + Claude Sonnet)
 - **Schema export/import** — download schema definitions as JSON files, upload to restore or migrate between environments
 - **Error recovery** — fix bad metadata, redeploy, and the system recovers without manual intervention
-- **Full validation** — class names, field names, type names, and reserved words are validated before save
+- **Full validation** — one `MetadataValidator` guards every path (UI save, AI tools, Roslyn generation, graduation): identifiers, keywords, reserved names, types, name collisions, PostgreSQL identifier length
+- **Startup schema guard** — a field whose live column no longer matches its metadata type or FK target is skipped at startup instead of breaking every query on the entity; `validate_schema` reports it
 - **Metadata-driven actions** — add buttons to a DetailView without writing code: `SetField`/`ShowMessage`/`OpenView` steps defined as metadata, live the next time the view opens (no deploy, no restart, no compilation); up to 10 actions per entity
-- **168-test regression suite** — Playwright E2E across 12 phases plus unit tests, all passing (.NET/Playwright/xUnit)
+- **212-test regression suite** — Playwright E2E across 12 phases plus unit tests, all passing (.NET/Playwright/xUnit; 5 live-AI tests on top, opt-in)
 
 ## Tech Stack
 
@@ -331,10 +332,10 @@ AI_TEST_API_KEY=sk-... dotnet test XafDynamicAssemblies/XafDynamicAssemblies.Tes
 | 1 — Metadata CRUD | 11 | Create, read, update, delete CustomClass and CustomField |
 | 2 — Runtime Entities | 13 | Roslyn compilation, entity setup, full CRUD on runtime types |
 | 3 — Validation | 9 | Invalid names, reserved words, type dropdown, Test Compile All (ListView action) |
-| 4 — Hot-Load | 7 | Deploy action, navigation updates, field addition, data survival across restarts |
+| 4 — Hot-Load | 8 | Own Customer prerequisite, deploy action, navigation updates, nested-grid field addition, data survival across restarts |
 | 5 — Relationships | 8 | Entity references, FK constraints, cross-entity navigation |
 | 6 — Graduation | 9 | Source generation, status transition, data preservation post-graduation |
-| 7 — Error Handling | 7 | Degraded mode, compilation failure recovery, empty metadata, restart resilience |
+| 7 — Error Handling | 8 | Deploy abort with error toast on bad metadata (no restart), recovery, SchemaGuard column-mismatch skip, empty metadata, restart resilience |
 | 8 — Performance | 4 | Bulk 10-class compilation, concurrent page access |
 | 9 — Review Fixes | 19 | Cross-references, required refs, field attributes, graduation escaping |
 | 10 — Web API | 36 | Swagger, OData CRUD, query features, IsApiExposed toggle, API↔UI consistency |
