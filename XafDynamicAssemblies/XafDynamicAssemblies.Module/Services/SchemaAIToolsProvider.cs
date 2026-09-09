@@ -446,7 +446,7 @@ public sealed class SchemaAIToolsProvider
                         field.TypeName = string.IsNullOrWhiteSpace(fd.ReferencedClass)
                             ? (fd.Type ?? "System.String")
                             : "Reference";
-                        field.IsRequired = fd.Required;
+                        field.IsRequired = fd.Required ?? false;
                         field.ReferencedClassName = fd.ReferencedClass;
                         field.Description = fd.Description;
                         field.SortOrder = sortOrder++;
@@ -566,7 +566,7 @@ public sealed class SchemaAIToolsProvider
                     field.TypeName = string.IsNullOrWhiteSpace(fd.ReferencedClass)
                         ? (fd.Type ?? "System.String")
                         : "Reference";
-                    field.IsRequired = fd.Required;
+                    field.IsRequired = fd.Required ?? false;
                     field.ReferencedClassName = fd.ReferencedClass;
                     field.Description = fd.Description;
                     field.SortOrder = ++maxSort;
@@ -595,7 +595,8 @@ public sealed class SchemaAIToolsProvider
                     }
                     if (fd.ReferencedClass != null)
                         field.ReferencedClassName = fd.ReferencedClass;
-                    field.IsRequired = fd.Required;
+                    if (fd.Required.HasValue) // AI-002: an omitted "required" must not flip the field to optional
+                        field.IsRequired = fd.Required.Value;
                     if (fd.Description != null)
                         field.Description = fd.Description;
                     changes.Add($"Updated field '{fd.Name}'");
@@ -1117,7 +1118,7 @@ public sealed class SchemaAIToolsProvider
     {
         public string Name { get; set; }
         public string Type { get; set; }
-        public bool Required { get; set; }
+        public bool? Required { get; set; }
         public string ReferencedClass { get; set; }
         public string Description { get; set; }
     }
