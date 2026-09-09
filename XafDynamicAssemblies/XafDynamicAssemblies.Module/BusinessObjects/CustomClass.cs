@@ -73,6 +73,12 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         [Browsable(false)]
         public bool IsClassNameNotKeyword => string.IsNullOrWhiteSpace(ClassName) || !CustomClassValidation.IsCSharpKeyword(ClassName);
 
+        [RuleFromBoolProperty("CustomClass_NameLength", DefaultContexts.Save,
+            "Class Name cannot be longer than 63 characters (PostgreSQL identifier limit).")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsClassNameLengthValid => string.IsNullOrWhiteSpace(ClassName) || ClassName.Length <= MetadataValidator.MaxPgIdentifier;
+
         [RuleFromBoolProperty("CustomClass_NotReservedType", DefaultContexts.Save,
             "Class Name conflicts with a built-in type name.")]
         [NotMapped]

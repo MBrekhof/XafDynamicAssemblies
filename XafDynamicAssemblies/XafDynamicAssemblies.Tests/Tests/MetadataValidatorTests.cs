@@ -70,6 +70,22 @@ public class MetadataValidatorTests
         => Assert.NotNull(MetadataValidator.Validate(Class("Order", Field("CustomerId", "System.Guid"), Field("Customer", referenced: "Customer"))));
 
     [Fact]
+    public void Names_over_postgres_identifier_limit_rejected()
+    {
+        Assert.NotNull(MetadataValidator.Validate(Class(new string('C', 64), Field("Name"))));
+        Assert.Null(MetadataValidator.Validate(Class(new string('C', 63), Field("Name"))));
+        Assert.NotNull(MetadataValidator.Validate(Class("Employee", Field(new string('F', 62)))));
+        Assert.Null(MetadataValidator.Validate(Class("Employee", Field(new string('F', 61)))));
+    }
+
+    [Fact]
+    public void PgName_truncates_to_63()
+    {
+        Assert.Equal(63, SchemaSynchronizer.PgName("FK_" + new string('A', 40) + "_" + new string('B', 40)).Length);
+        Assert.Equal("Short", SchemaSynchronizer.PgName("Short"));
+    }
+
+    [Fact]
     public void ValidateCompilation_reports_bad_metadata_as_errors_not_throw()
     {
         var result = RuntimeAssemblyBuilder.ValidateCompilation(new List<CustomClass> { Class("class", Field("Name")) });

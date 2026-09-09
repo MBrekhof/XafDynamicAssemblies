@@ -11,6 +11,9 @@ namespace XafDynamicAssemblies.Module.Validation
     /// </summary>
     public static class MetadataValidator
     {
+        /// <summary>PostgreSQL NAMEDATALEN-1 (DATA-006).</summary>
+        public const int MaxPgIdentifier = 63;
+
         /// <summary>Returns the first problem with the class metadata, or null when it is safe to emit.</summary>
         public static string Validate(CustomClass cc)
         {
@@ -21,6 +24,8 @@ namespace XafDynamicAssemblies.Module.Validation
                 return $"Class Name '{className}' is a C# keyword.";
             if (CustomClassValidation.IsReservedTypeName(className))
                 return $"Class Name '{className}' conflicts with a built-in type name.";
+            if (className.Length > MaxPgIdentifier)
+                return $"Class Name '{className}' is longer than {MaxPgIdentifier} characters (PostgreSQL identifier limit).";
 
             var seen = new HashSet<string>(StringComparer.Ordinal);
             // Distinct(): EF relationship fixup plus an explicit Fields.Add can hold the same
@@ -39,6 +44,9 @@ namespace XafDynamicAssemblies.Module.Validation
                     return $"Field Name '{name}' cannot be the same as its class name.";
                 if (!seen.Add(name))
                     return $"Field Name '{name}' is declared more than once.";
+                // A reference field also emits "<name>Id"; keep the whole column under the limit.
+                if (name.Length + 2 > MaxPgIdentifier)
+                    return $"Field Name '{name}' is longer than {MaxPgIdentifier - 2} characters (PostgreSQL identifier limit).";
 
                 var isReference = !string.IsNullOrWhiteSpace(field.ReferencedClassName)
                     && (field.TypeName == "Reference" || string.IsNullOrWhiteSpace(field.TypeName));

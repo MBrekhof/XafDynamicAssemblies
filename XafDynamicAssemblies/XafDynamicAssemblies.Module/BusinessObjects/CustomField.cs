@@ -53,6 +53,12 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         [Browsable(false)]
         public bool IsTypeNameValid => string.IsNullOrWhiteSpace(TypeName) || SupportedTypes.IsSupported(TypeName);
 
+        [RuleFromBoolProperty("CustomField_NameLength", DefaultContexts.Save,
+            "Field Name cannot be longer than 61 characters (PostgreSQL identifier limit, incl. the 'Id' FK suffix).")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsFieldNameLengthValid => string.IsNullOrWhiteSpace(FieldName) || FieldName.Length + 2 <= MetadataValidator.MaxPgIdentifier;
+
         [RuleFromBoolProperty("CustomField_NotKeyword", DefaultContexts.Save,
             "Field Name cannot be a C# keyword.")]
         [NotMapped]
