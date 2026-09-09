@@ -1,6 +1,7 @@
 using DevExpress.Data.Filtering;
 using DevExpress.ExpressApp;
 using DevExpress.ExpressApp.Actions;
+using DevExpress.ExpressApp.DC;
 using DevExpress.Persistent.Base;
 using Microsoft.Extensions.Logging;
 using XafDynamicAssemblies.Module.BusinessObjects;
@@ -170,7 +171,12 @@ namespace XafDynamicAssemblies.Module.Controllers
             var meta = entry.Meta;
             var steps = meta.Steps.OrderBy(s => s.SortOrder).ToList();
             var obj = View.CurrentObject;
-            bool anySet = false;
+
+            // ACT-003: two passes. Resolve every step first so a bad step 2 cannot leave step 1's
+            // SetValue pending in the view's ObjectSpace (the user's next Save would persist a
+            // half-applied action). Rollback is not an option: it would discard the user's own edits.
+            var sets = new List<(IMemberInfo Member, object Value)>();
+            var messages = new List<(string Text, InformationType Type)>();
             Type openViewTarget = null;
 
             foreach (var step in steps)
@@ -192,45 +198,21 @@ namespace XafDynamicAssemblies.Module.Controllers
                             ShowError($"Action '{meta.Caption}': {ex.Message}");
                             return;
                         }
-                        member.SetValue(obj, converted);
-                        anySet = true;
+                        sets.Add((member, converted));
                         break;
                     }
                     case StepKind.ShowMessage:
-                        Application.ShowViewStrategy.ShowMessage(step.MessageText,
-                            step.MessageType switch
-                            {
-                                StepMessageType.Success => InformationType.Success,
-                                StepMessageType.Warning => InformationType.Warning,
-                                StepMessageType.Error => InformationType.Error,
-                                _ => InformationType.Info,
-                            });
+                        messages.Add((step.MessageText, step.MessageType switch
+                        {
+                            StepMessageType.Success => InformationType.Success,
+                            StepMessageType.Warning => InformationType.Warning,
+                            StepMessageType.Error => InformationType.Error,
+                            _ => InformationType.Info,
+                        }));
                         break;
                     case StepKind.OpenView:
                     {
-                        // Simple-name resolution (runtime types, then compiled types), same
-                        // precedent as SchemaAIToolsProvider's entity resolution -- FindTypeInfo
-                        // keys by Type.FullName, which doesn't match this metadata system's
-                        // simple-name convention used everywhere else (TargetEntity above, AI tools).
-                        var target = XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes
-                            .FirstOrDefault(t => t.Name == step.TargetEntityName);
-                        if (target == null)
-                        {
-                            foreach (var typeInfo in XafTypesInfo.Instance.PersistentTypes)
-                            {
-                                if (typeInfo.Name == step.TargetEntityName)
-                                {
-                                    target = typeInfo.Type;
-                                    break;
-                                }
-                            }
-                        }
-                        // Fallback: fully-qualified name via FindTypeInfo (existing behavior).
-                        if (target == null)
-                        {
-                            var ti = XafTypesInfo.Instance.FindTypeInfo(step.TargetEntityName);
-                            target = ti?.Type;
-                        }
+                        var target = ResolveEntityType(step.TargetEntityName);
                         if (target == null)
                         {
                             ShowError($"Action '{meta.Caption}': entity '{step.TargetEntityName}' not found.");
@@ -242,6 +224,13 @@ namespace XafDynamicAssemblies.Module.Controllers
                 }
             }
 
+            // Second pass: everything resolved, now mutate and show.
+            foreach (var (member, value) in sets)
+                member.SetValue(obj, value);
+            foreach (var (text, type) in messages)
+                Application.ShowViewStrategy.ShowMessage(text, type);
+            var anySet = sets.Count > 0;
+
             if (anySet)
                 View.ObjectSpace.CommitChanges();
 
@@ -251,6 +240,21 @@ namespace XafDynamicAssemblies.Module.Controllers
                 e.ShowViewParameters.CreatedView = Application.CreateListView(os, openViewTarget, true);
                 e.ShowViewParameters.TargetWindow = TargetWindow.Default;
             }
+        }
+
+        /// <summary>
+        /// Simple-name resolution (runtime types, then compiled types), same precedent as
+        /// SchemaAIToolsProvider's entity resolution -- FindTypeInfo keys by Type.FullName, which
+        /// doesn't match this metadata system's simple-name convention (TargetEntity, AI tools).
+        /// </summary>
+        private static Type ResolveEntityType(string name)
+        {
+            var target = XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes.FirstOrDefault(t => t.Name == name);
+            if (target != null) return target;
+            foreach (var typeInfo in XafTypesInfo.Instance.PersistentTypes)
+                if (typeInfo.Name == name) return typeInfo.Type;
+            // Fallback: fully-qualified name via FindTypeInfo (existing behavior).
+            return XafTypesInfo.Instance.FindTypeInfo(name)?.Type;
         }
 
         private void ShowError(string message) =>
