@@ -123,7 +123,7 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         {
             var firstText = await suggestions.First.InnerTextAsync();
             await chat.ClickSuggestionAsync(firstText);
-            await chat.WaitForResponseAsync(30_000);
+            await chat.WaitForResponseAsync(30_000, chat.LastSentAssistantCount);
             var response = await chat.GetLastResponseAsync();
             Assert.True(response.Length > 0, "Clicking a suggestion should produce a response");
         }
