@@ -1,5 +1,28 @@
 # DONE — XafDynamicAssemblies
 
+#### SEC-003: Metadata strings are interpolated raw into generated C# (code injection via ReferencedClassName/TypeName) (ID: 1554)
+
+**Completed: 2026-09-09, commit 0be7d4c (branch fix/codex-review-2026-09).** New
+`Module/Validation/MetadataValidator.cs` is the one guard every path converges on: identifier,
+keyword, reserved name, supported type, reference target, duplicate / FK-companion (`XId`) /
+class-name collisions. `RuntimeAssemblyBuilder.ValidateCompilation` and `Compile` run it before any
+source is generated and report failures as `Errors` (not throw — `EarlyBootstrap` has no guard, so a
+throw would take the process down on one bad row; a failed result already routes to DegradedMode /
+validate_schema). `GenerateSource` and `GraduationService.GenerateGraduationSource` throw as a hard
+backstop. String metadata goes through `SymbolDisplay.FormatLiteral`; graduation descriptions are
+flattened to one comment line; `MapToClrTypeName` no longer falls through. Codex plan review added
+three catches that landed: identifier regexes anchored with `\z` (trailing newline bypassed `$`),
+the collision checks, and blank-name rejection. 22 unit tests in `MetadataValidatorTests`.
+
+#### AI-001: create_entity/modify_entity commit metadata without identifier/type validation; one bad row degrades every runtime entity (ID: 1560)
+
+**Completed: 2026-09-09, commit 64d3a46 (branch fix/codex-review-2026-09).** `CreateEntity` and
+`ModifyEntity` call `MetadataValidator.Validate(cc)` right before `CommitChanges()` and return the
+message instead of saving. `modify_entity` also removes a deleted field from the in-memory collection
+first. Codex diff review caught that EF relationship fixup plus the explicit `Fields.Add` can hold the
+same tracked instance twice, so the validator iterates `Distinct()` instances (EF `BaseObject` does
+not override `Equals`, verified in the 26.1 sources).
+
 #### SEC-004: No authentication anywhere; OData metadata CRUD and exposed entities are anonymous (ID: 1555)
 
 **Completed: 2026-09-08, commit 71bd193.** Decision: real security (option a), "nobody should

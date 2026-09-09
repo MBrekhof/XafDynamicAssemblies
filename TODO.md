@@ -2,31 +2,7 @@
 
 Source: Codex full-repo review 2026-09-08 (27 findings), each verified against the source and DX 26.1 installed sources before carding. Severity in the body is mine, Codex's original is quoted.
 
-## P0: Critical
-
-#### SEC-003: Metadata strings are interpolated raw into generated C# (code injection via ReferencedClassName/TypeName) (ID: 1554)
-
-**Codex (Critical):** `RuntimeAssemblyBuilder.cs:181` interpolates `field.ReferencedClassName` straight into source; the only rule is non-empty. Crafted metadata compiles to executable members that run under the server identity after the next Deploy.
-
-**Assessment: CONFIRMED, Critical (with SEC-004 this is unauthenticated RCE after one Deploy; High on its own).**
-- `RuntimeAssemblyBuilder.cs:176-181`: `public virtual {refTypeName} {field.FieldName}` with `refTypeName = field.ReferencedClassName`; `CustomField.cs:56-60` only requires non-empty. Payload `Company X {get;set;} static Emp(){...} public virtual Company` is valid C#.
-- Second vector: line 263 `_ => typeName` emits an unsupported `TypeName` verbatim at line 197. UI blocks it via `IsTypeNameValid`, the AI tool path never validates (AI-001).
-- `ClassName`/`FieldName` are regex-checked only by XAF Save rules, which do not fire on the AI tool's non-secured ObjectSpace. `NavigationGroup`/`ToolTip`/`DisplayName` go through `EscapeString` and are not vectors; `Description` is never emitted.
-
-**Fix:** Validate at the one point every write path converges on: in `RuntimeAssemblyBuilder.GenerateSource` throw if `ClassName`, any `FieldName` or `ReferencedClassName` fails `CustomClassValidation.IsValidIdentifier`, or a non-reference `TypeName` fails `SupportedTypes.IsSupported`; replace the `_ => typeName` fallthrough with a throw. The orchestrator already treats a throw as a failed compile. Add a `RuleFromBoolProperty` on `ReferencedClassName` so the UI reports it early, and swap `EscapeString` for Roslyn's `SymbolDisplay.FormatLiteral(s, quote: true)`.
-
 ## P1: High
-
-#### AI-001: create_entity/modify_entity commit metadata without identifier/type validation; one bad row degrades every runtime entity (ID: 1560)
-
-**Codex (High):** `SchemaAIToolsProvider.cs:459`. Create/modify commits skip the business-object validation rules; class name `class` or field name `public` persist, then break compilation of every runtime entity in the shared assembly.
-
-**Assessment: CONFIRMED, High.**
-- `CreateEntity` (`:417-459`) and `ModifyEntity` (`:480-597`) only check `IsNullOrWhiteSpace`; `FieldName = fd.Name`, `TypeName = fd.Type ?? "System.String"` stored as received, then `CommitChanges()` on the `INonSecuredObjectSpaceFactory` space. `RuleFromBoolProperty` rules on `CustomClass.cs:64-80` / `CustomField.cs:38-60` run in the view-level validation controller only (same lesson as ACT-002).
-- `RuntimeAssemblyBuilder.cs:160,197` emit names verbatim, no `@` prefix. `class` → CS1001 → single compilation unit fails → `SchemaChangeOrchestrator.cs:87-96` restart → `Module.cs:258-265` DegradedMode, every runtime entity unavailable until the row is fixed by hand. An unsupported `TypeName` also throws in `SupportedTypes.GetPostgresType`, aborting DDL sync for all remaining classes (DATA-003).
-- The tool description's "call validate_schema afterwards" is advisory, not enforced.
-
-**Fix:** One shared helper, e.g. `MetadataValidator.Validate(CustomClass cc)` in `Module/Validation/`, applying the existing predicates (`CustomClassValidation.IsValidIdentifier/IsCSharpKeyword/IsReservedTypeName`, `CustomFieldValidation.IsValidIdentifier/IsReservedFieldName`, `SupportedTypes.IsSupported`, identifier regex on `ReferencedClassName`), returning the first message. Call it in `CreateEntity` and `ModifyEntity` right before `CommitChanges()` and return the message instead of committing. Pair with the `GenerateSource` guard from SEC-003 so a bad row can never reach Roslyn from any path.
 
 #### DATA-003: Required-column ADD COLUMN fails on populated tables and the orchestrator deploys anyway (ID: 1561)
 
