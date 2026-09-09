@@ -313,7 +313,7 @@ namespace XafDynamicAssemblies.Module
         /// Removes previously-added runtime types first to prevent duplicates
         /// across hot-load cycles or multiple Setup calls.
         /// </summary>
-        public void RefreshRuntimeTypes(Type[] runtimeTypes)
+        private void RefreshRuntimeTypes(Type[] runtimeTypes)
         {
             // Remove previously-added runtime types
             foreach (var oldType in _addedRuntimeTypes)

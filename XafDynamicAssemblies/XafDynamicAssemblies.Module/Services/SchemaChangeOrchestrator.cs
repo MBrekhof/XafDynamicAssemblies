@@ -1,5 +1,4 @@
 using DevExpress.ExpressApp;
-using DevExpress.ExpressApp.DC;
 using DevExpress.Persistent.Base;
 using XafDynamicAssemblies.Module.BusinessObjects;
 
@@ -7,8 +6,7 @@ namespace XafDynamicAssemblies.Module.Services
 {
     /// <summary>
     /// Coordinates hot-load of runtime entities.
-    /// SemaphoreSlim-guarded sequence: DDL → Roslyn → update DbContext.RuntimeEntityTypes →
-    /// register in TypesInfo → notify.
+    /// SemaphoreSlim-guarded sequence: DDL → Roslyn (validates metadata) → notify → restart.
     /// RestartNeeded is always set after any successful compilation because XAF's
     /// process-static TypesInfo and SharedApplicationModelManagerContainer cannot be
     /// properly reset in-process.
@@ -81,44 +79,40 @@ namespace XafDynamicAssemblies.Module.Services
                 {
                     var hadTypes = _previousTypeNames.Count > 0;
                     _previousTypeNames.Clear();
-                    XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = Array.Empty<Type>();
                     RestartNeeded = hadTypes;
                     var ver = Interlocked.Increment(ref _schemaVersion);
                     SchemaChanged?.Invoke(ver);
                     return null;
                 }
 
-                // 3. Compile via Roslyn
-                var result = XafDynamicAssembliesModule.AssemblyManager.LoadNewAssembly(classes);
+                // 3. Compile via Roslyn — validation only (HOT-001): nothing is loaded into this
+                // process, so AssemblyManager/DbContext keep the types the open views hold.
+                var result = RuntimeAssemblyBuilder.ValidateCompilation(classes);
                 if (!result.Success)
                 {
-                    Tracing.Tracer.LogError("Hot-load compilation failed:");
+                    Tracing.Tracer.LogError("Deploy aborted, compilation failed:");
                     foreach (var error in result.Errors)
                         Tracing.Tracer.LogError("  " + error);
-                    // Still trigger restart so the server re-enters degraded mode cleanly
-                    RestartNeeded = true;
-                    var ver = Interlocked.Increment(ref _schemaVersion);
-                    SchemaChanged?.Invoke(ver);
-                    return "Compilation failed: " + string.Join("; ", result.Errors.Take(3));
+                    // This process still runs the previous, working type set (HOT-001), so there
+                    // is nothing to recover from by restarting; a restart would only boot into
+                    // degraded mode. Surface the errors and keep serving.
+                    return "Deploy aborted, compilation failed: " + string.Join("; ", result.Errors.Take(3));
                 }
 
-                // 4. Update DbContext types (atomic reference swap)
-                XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = result.RuntimeTypes;
+                // HOT-001: no in-process type swap. The compile above only validates the metadata;
+                // publishing new Type identities into the dying process (DbContext types, TypesInfo,
+                // AdditionalExportedTypes) made requests in the ~3 s restart window fail with
+                // "not part of the model" while open views still held the old types. The new
+                // process recompiles from metadata in EarlyBootstrap.
 
-                // 5. Register types with XAF's TypesInfo
-                RegisterTypesInTypesInfo(result.RuntimeTypes);
-
-                // 6. Update module's AdditionalExportedTypes
-                XafDynamicAssembliesModule.Instance?.RefreshRuntimeTypes(result.RuntimeTypes);
-
-                // 7. Always restart after compilation — XAF's process-static TypesInfo
+                // 4. Always restart after compilation — XAF's process-static TypesInfo
                 // and SharedApplicationModelManagerContainer cannot be properly reset
                 // in-process, so any recompilation requires a fresh process.
-                var newTypeNames = new HashSet<string>(result.RuntimeTypes.Select(t => t.Name));
+                var newTypeNames = new HashSet<string>(classes.Select(c => c.ClassName));
                 RestartNeeded = true;
                 _previousTypeNames = newTypeNames;
 
-                // 8. Notify (Startup.cs wires this to SignalR broadcast + conditional restart)
+                // 5. Notify (Startup.cs wires this to SignalR broadcast + conditional restart)
                 var version = Interlocked.Increment(ref _schemaVersion);
                 SchemaChanged?.Invoke(version);
                 return null;
@@ -134,21 +128,6 @@ namespace XafDynamicAssemblies.Module.Services
             finally
             {
                 _semaphore.Release();
-            }
-        }
-
-        private static void RegisterTypesInTypesInfo(Type[] runtimeTypes)
-        {
-            foreach (var type in runtimeTypes)
-            {
-                try
-                {
-                    XafTypesInfo.Instance.RegisterEntity(type);
-                }
-                catch (Exception ex)
-                {
-                    Tracing.Tracer.LogError($"TypesInfo registration failed for {type.Name}: {ex.Message}");
-                }
             }
         }
 
