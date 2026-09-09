@@ -47,6 +47,23 @@ public class Phase04_HotLoadTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// TEST-004: Test_05 needs the Customer runtime entity that Phase02 creates, but xUnit 2 gives
+    /// no class ordering guarantee (it held by file-name coincidence). Establish the prerequisite
+    /// here; Test_01's Deploy then compiles it together with HotLoadProduct.
+    /// </summary>
+    [Fact]
+    public async Task Test_00_EnsureCustomerExists()
+    {
+        if (!DatabaseHelper.ClassExists("Customer"))
+        {
+            DatabaseHelper.InsertClassViaDb("Customer", "CRM", "Customer entity (Phase04 prerequisite)");
+            DatabaseHelper.InsertFieldViaDb("Customer", "Name", "System.String", isDefault: true);
+        }
+        Assert.True(DatabaseHelper.ClassExists("Customer"));
+        await Task.CompletedTask;
+    }
+
     // --- TestHotLoadNewClass: create a new class via UI and deploy it ---
 
     /// <summary>Create a new CustomClass and click Deploy Schema.</summary>

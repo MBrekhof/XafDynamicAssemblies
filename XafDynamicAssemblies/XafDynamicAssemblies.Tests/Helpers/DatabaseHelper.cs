@@ -92,6 +92,34 @@ public static class DatabaseHelper
         insertCmd.ExecuteNonQuery();
     }
 
+    /// <summary>True when a live (not soft-deleted) CustomClass row with this name exists.</summary>
+    public static bool ClassExists(string className)
+    {
+        using var conn = GetConnection();
+        using var cmd = new NpgsqlCommand(
+            "SELECT EXISTS (SELECT 1 FROM \"CustomClasses\" WHERE \"ClassName\" = @name " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0))", conn);
+        cmd.Parameters.AddWithValue("name", className);
+        return (bool)cmd.ExecuteScalar()!;
+    }
+
+    /// <summary>
+    /// TEST-004: insert a Runtime CustomClass row directly (no fields), bypassing the UI.
+    /// Lets a phase establish its own prerequisites instead of relying on class execution order.
+    /// </summary>
+    public static void InsertClassViaDb(string className, string navGroup, string description = "")
+    {
+        using var conn = GetConnection();
+        using var cmd = new NpgsqlCommand(@"
+            INSERT INTO ""CustomClasses"" (""ID"", ""ClassName"", ""NavigationGroup"", ""Description"",
+                ""Status"", ""GCRecord"", ""OptimisticLockField"")
+            VALUES (gen_random_uuid(), @name, @navGroup, @description, 'Runtime', 0, 0)", conn);
+        cmd.Parameters.AddWithValue("name", className);
+        cmd.Parameters.AddWithValue("navGroup", navGroup);
+        cmd.Parameters.AddWithValue("description", description);
+        cmd.ExecuteNonQuery();
+    }
+
     /// <summary>
     /// Set the IsApiExposed flag on a CustomClass directly via SQL, ported from the Python
     /// test suite's set_api_exposed_via_db() (tests/tests/test_phase10_web_api.py).
