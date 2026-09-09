@@ -68,7 +68,6 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
         await DeleteIfExistsAsync(className);
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -499,10 +498,11 @@ public class Phase09_ReviewFixesTests : IAsyncLifetime
 
         // Notes: VisibleInListView(false) and Size(-1) for memo
         Assert.Contains("[VisibleInListView(false)]", source);
-        Assert.Contains("Size(-1)", source);
+        Assert.Contains("FieldSize(-1)", source);
 
-        // EmployeeCode: Editable(false)
-        Assert.Contains("Editable(false)", source);
+        // EmployeeCode: read-only. DATA-004: [Editable(false)] / [Size] did not exist in DX 26.1;
+        // the generators now emit the real XAF attributes.
+        Assert.Contains("ModelDefault(\"AllowEdit\", \"False\")", source);
 
         // Required reference: Department FK should be non-nullable Guid (not Guid?)
         Assert.Contains("Guid DepartmentId", source);

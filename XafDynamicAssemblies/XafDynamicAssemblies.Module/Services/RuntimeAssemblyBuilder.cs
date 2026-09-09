@@ -208,7 +208,7 @@ namespace XafDynamicAssemblies.Module.Services
                         nullable = "";
 
                     if (field.TypeName == "System.String" && field.StringMaxLength.HasValue)
-                        sb.AppendLine($"        [DevExpress.Persistent.Base.Size({field.StringMaxLength.Value})]");
+                        sb.AppendLine($"        [DevExpress.ExpressApp.DC.FieldSize({field.StringMaxLength.Value})]");
 
                     sb.AppendLine($"        public virtual {clrType}{nullable} {field.FieldName} {{ get; set; }}");
                 }
@@ -249,7 +249,7 @@ namespace XafDynamicAssemblies.Module.Services
             if (!field.IsVisibleInDetailView)
                 sb.AppendLine("        [VisibleInDetailView(false)]");
             if (!field.IsEditable)
-                sb.AppendLine("        [DevExpress.ExpressApp.Editors.Editable(false)]");
+                sb.AppendLine("        [DevExpress.ExpressApp.Model.ModelDefault(\"AllowEdit\", \"False\")]");
             if (!string.IsNullOrWhiteSpace(field.ToolTip))
                 sb.AppendLine($"        [ToolTip({Literal(field.ToolTip)})]");
             if (!string.IsNullOrWhiteSpace(field.DisplayName))

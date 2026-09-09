@@ -381,7 +381,9 @@ namespace XafDynamicAssemblies.Module
             var classIds = string.Join(",", classMap.Keys.Select(id => $"'{id}'"));
             using (var cmd = new NpgsqlCommand(
                 $@"SELECT ""CustomClassId"", ""FieldName"", ""TypeName"", ""IsRequired"", ""IsDefaultField"",
-                          ""Description"", ""ReferencedClassName"", ""SortOrder""
+                          ""Description"", ""ReferencedClassName"", ""SortOrder"",
+                          ""IsImmediatePostData"", ""StringMaxLength"", ""IsVisibleInListView"",
+                          ""IsVisibleInDetailView"", ""IsEditable"", ""ToolTip"", ""DisplayName""
                    FROM ""CustomFields""
                    WHERE ""CustomClassId"" IN ({classIds}) AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0)
                    ORDER BY ""SortOrder"", ""FieldName""",
@@ -402,6 +404,15 @@ namespace XafDynamicAssemblies.Module
                             Description = reader.IsDBNull(5) ? null : reader.GetString(5),
                             ReferencedClassName = reader.IsDBNull(6) ? null : reader.GetString(6),
                             SortOrder = reader.GetInt32(7),
+                            // DATA-004: the UI attribute columns were never read, so hidden/read-only/
+                            // size/tooltip settings compiled with defaults on every deploy and restart.
+                            IsImmediatePostData = !reader.IsDBNull(8) && reader.GetBoolean(8),
+                            StringMaxLength = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                            IsVisibleInListView = reader.IsDBNull(10) || reader.GetBoolean(10),
+                            IsVisibleInDetailView = reader.IsDBNull(11) || reader.GetBoolean(11),
+                            IsEditable = reader.IsDBNull(12) || reader.GetBoolean(12),
+                            ToolTip = reader.IsDBNull(13) ? null : reader.GetString(13),
+                            DisplayName = reader.IsDBNull(14) ? null : reader.GetString(14),
                         });
                     }
                 }
