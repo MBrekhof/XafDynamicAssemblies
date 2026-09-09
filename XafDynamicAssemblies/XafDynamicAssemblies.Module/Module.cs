@@ -7,6 +7,7 @@ using DevExpress.Persistent.Base;
 using Npgsql;
 using XafDynamicAssemblies.Module.BusinessObjects;
 using XafDynamicAssemblies.Module.Services;
+using XafDynamicAssemblies.Module.Validation;
 
 namespace XafDynamicAssemblies.Module
 {
@@ -43,6 +44,7 @@ namespace XafDynamicAssemblies.Module
             DegradedMode = false;
             DegradedModeReason = null;
             ApiExposedClassNames = new();
+            SchemaGuard.Reset();
 
             // Reset XAF's TypesInfo to force full re-initialization on next host.
             // Without this, the process-static TypesInfo retains type registrations
@@ -337,6 +339,7 @@ namespace XafDynamicAssemblies.Module
         internal static List<CustomClass> QueryMetadata(string connectionString)
         {
             var classes = new List<CustomClass>();
+            SchemaGuard.Reset(); // every early return below means "nothing skipped"
 
             using var conn = new NpgsqlConnection(connectionString);
             conn.Open();
@@ -429,6 +432,10 @@ namespace XafDynamicAssemblies.Module
                     }
                 }
             }
+
+            // DATA-007: drop fields whose column can no longer materialize the metadata type
+            // (add-only DDL cannot fix a TypeName change); reasons go to SkippedFieldWarnings.
+            SchemaGuard.Sanitize(conn, classes);
 
             return classes;
         }

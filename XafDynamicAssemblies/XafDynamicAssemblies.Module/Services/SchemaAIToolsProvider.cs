@@ -395,6 +395,14 @@ public sealed class SchemaAIToolsProvider
                 }
             }
 
+            // DATA-007: fields the startup guard left out because the live column disagrees
+            if (SchemaGuard.SkippedFieldWarnings.Count > 0)
+            {
+                sb.AppendLine($"- {SchemaGuard.SkippedFieldWarnings.Count} field(s) skipped at the last startup/deploy (column type disagrees with metadata; fix the metadata, then Deploy):");
+                foreach (var w in SchemaGuard.SkippedFieldWarnings)
+                    sb.AppendLine($"  - {w}");
+            }
+
             return sb.ToString();
         }
         catch (Exception ex)
