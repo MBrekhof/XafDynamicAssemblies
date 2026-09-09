@@ -8,6 +8,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using XafDynamicAssemblies.Module.BusinessObjects;
+using XafDynamicAssemblies.Module.Validation;
 
 namespace XafDynamicAssemblies.Module.Services;
 
@@ -456,6 +457,12 @@ public sealed class SchemaAIToolsProvider
                 }
             }
 
+            // AI-001: XAF save rules do not fire on this non-secured ObjectSpace; validate here or a bad
+            // row breaks compilation of every runtime entity.
+            var invalid = MetadataValidator.Validate(cc);
+            if (invalid != null)
+                return $"Error: {invalid} Nothing was saved.";
+
             scope.Os.CommitChanges();
 
             var fieldCount = cc.Fields?.Count ?? 0;
@@ -529,6 +536,7 @@ public sealed class SchemaAIToolsProvider
                     var field = cc.Fields?.FirstOrDefault(f => f.FieldName == fieldName);
                     if (field != null)
                     {
+                        cc.Fields.Remove(field); // keep the in-memory collection honest for validation below
                         scope.Os.Delete(field);
                         changes.Add($"Removed field '{fieldName}'");
                     }
@@ -593,6 +601,10 @@ public sealed class SchemaAIToolsProvider
                     changes.Add($"Updated field '{fd.Name}'");
                 }
             }
+
+            var invalid = MetadataValidator.Validate(cc);
+            if (invalid != null)
+                return $"Error: {invalid} Nothing was saved.";
 
             scope.Os.CommitChanges();
 
