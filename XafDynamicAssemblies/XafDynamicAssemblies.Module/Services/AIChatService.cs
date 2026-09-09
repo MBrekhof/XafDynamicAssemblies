@@ -262,8 +262,9 @@ public sealed class AIChatService : IDisposable
                     if (ex is OperationCanceledException oce && userCancellationToken.IsCancellationRequested)
                         return false;
 
-                    // Retry timeouts (TaskCanceledException with no user cancellation)
-                    if (ex is TaskCanceledException or OperationCanceledException) return true;
+                    // Retry timeouts: HttpClient's own (TaskCanceledException) and the per-attempt
+                    // Polly timeout below, which surfaces as TimeoutRejectedException (AI-003).
+                    if (ex is TaskCanceledException or OperationCanceledException or Polly.Timeout.TimeoutRejectedException) return true;
 
                     if (ex is HttpRequestException httpEx)
                     {
