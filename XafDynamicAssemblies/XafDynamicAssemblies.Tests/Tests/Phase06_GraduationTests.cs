@@ -197,7 +197,10 @@ public class Phase06_GraduationTests : IAsyncLifetime
         // be rendered as a large text area)
         using var conn = DatabaseHelper.GetConnection();
         using var cmd = new NpgsqlCommand(
-            "SELECT \"GraduatedSource\", \"Status\" FROM \"CustomClasses\" WHERE \"ClassName\" = @name", conn);
+            // TEST-008: deferred deletion keeps soft-deleted GradTest rows from earlier runs (the
+            // unique index is filtered on GCRecord = 0), so read only the live row.
+            "SELECT \"GraduatedSource\", \"Status\" FROM \"CustomClasses\" WHERE \"ClassName\" = @name " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
         cmd.Parameters.AddWithValue("name", "GradTest");
         using var reader = cmd.ExecuteReader();
         Assert.True(reader.Read(), "GradTest should exist in DB");
@@ -211,6 +214,7 @@ public class Phase06_GraduationTests : IAsyncLifetime
         Assert.Contains("DbContext", source);
         Assert.Contains("migration", source.ToLowerInvariant());
         Assert.Equal("Compiled", status);
+        Assert.False(reader.Read(), "exactly one live GradTest row expected");
     }
 
     // --- TestGraduationRemovesFromRuntime: verify that after graduation + deploy, the entity is removed from runtime ---
