@@ -48,9 +48,15 @@ namespace XafDynamicAssemblies.Blazor.Server
             services.AddDevExpressAI();
             services.AddScoped<Module.Services.ISchemaFileService, Services.BlazorSchemaFileService>();
             services.AddScoped<CircuitHandler, CircuitHandlerProxy>();
-            // Set connection string for runtime entity bootstrap (before XAF initializes)
-            XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString =
-                Configuration.GetConnectionString("ConnectionString");
+            // CFG-001: resolve the connection string ONCE; EF Core, the runtime-entity bootstrap
+            // and SchemaSynchronizer must all hit the same database (the EASYTEST override used
+            // to switch only EF, sending DDL to the ordinary DB).
+            var connectionString = Configuration.GetConnectionString("ConnectionString");
+#if EASYTEST
+            connectionString = Configuration.GetConnectionString("EasyTestConnectionString") ?? connectionString;
+#endif
+            ArgumentNullException.ThrowIfNull(connectionString);
+            XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString = connectionString;
 
             // Early bootstrap: compile runtime types before XAF init so they're available
             // for Web API endpoint registration below. BootstrapRuntimeEntities (in Module.Setup)
@@ -98,17 +104,6 @@ namespace XafDynamicAssemblies.Blazor.Server
                         // Do not use this code in production environment to avoid data loss.
                         // We recommend that you refer to the following help topic before you use an in-memory database: https://docs.microsoft.com/en-us/ef/core/testing/in-memory
                         //options.UseInMemoryDatabase();
-                        string connectionString = null;
-                        if (Configuration.GetConnectionString("ConnectionString") != null)
-                        {
-                            connectionString = Configuration.GetConnectionString("ConnectionString");
-                        }
-#if EASYTEST
-                        if(Configuration.GetConnectionString("EasyTestConnectionString") != null) {
-                            connectionString = Configuration.GetConnectionString("EasyTestConnectionString");
-                        }
-#endif
-                        ArgumentNullException.ThrowIfNull(connectionString);
                         options.UseNpgsql(connectionString);
                         options.ReplaceService<IModelCacheKeyFactory, DynamicModelCacheKeyFactory>();
                         options.UseChangeTrackingProxies();
