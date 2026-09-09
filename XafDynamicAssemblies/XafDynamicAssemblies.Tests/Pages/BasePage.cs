@@ -40,10 +40,12 @@ public class BasePage
         $"dxbl-toolbar-item > button[data-action-name=\"{captionOrId}\"], " +
         $"dxbl-bar-item > button[data-action-name=\"{captionOrId}\"]";
 
-    /// <summary>Click the New action button in the toolbar.</summary>
+    /// <summary>Click the New action button in the toolbar and wait for the DetailView form to render.</summary>
     public async Task ClickNewAsync()
     {
         await Page.Locator(ActionButtonSelector("New")).First.ClickAsync();
+        // TEST-007: wait for the thing we need (a form layout control) rather than a fixed sleep.
+        await Page.Locator(".dxbl-fl-ctrl").First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
         await WaitForLoadingAsync();
     }
 

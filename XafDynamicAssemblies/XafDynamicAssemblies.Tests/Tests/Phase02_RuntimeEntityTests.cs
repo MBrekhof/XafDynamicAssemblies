@@ -55,7 +55,6 @@ public class Phase02_RuntimeEntityTests : IAsyncLifetime
         await DeleteIfExistsAsync(className);
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -156,7 +155,6 @@ public class Phase02_RuntimeEntityTests : IAsyncLifetime
 
         // Create new
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
 
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "TestCustomer1");
@@ -260,7 +258,6 @@ public class Phase02_RuntimeEntityTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
 
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "BoolTestCustomer");

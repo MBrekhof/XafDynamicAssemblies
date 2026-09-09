@@ -83,7 +83,6 @@ public class Phase10_WebApiTests : IAsyncLifetime
 
         var lv = new ListViewPage(_page);
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -643,7 +642,6 @@ public class Phase10_WebApiTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Product Name", "UICreatedItem");
         await detail.ClickSaveAsync();

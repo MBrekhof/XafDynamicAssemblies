@@ -56,7 +56,6 @@ public class Phase06_GraduationTests : IAsyncLifetime
 
         var lv = new ListViewPage(_page);
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -131,7 +130,6 @@ public class Phase06_GraduationTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Title", "GradTestRecord1");
         await detail.ClickSaveAsync();

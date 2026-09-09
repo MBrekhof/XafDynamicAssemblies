@@ -54,7 +54,6 @@ public class Phase05_RelationshipTests : IAsyncLifetime
 
         var lv = new ListViewPage(_page);
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -139,7 +138,6 @@ public class Phase05_RelationshipTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Dept Name", "Engineering");
         await detail.ClickSaveAsync();
@@ -167,7 +165,6 @@ public class Phase05_RelationshipTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Emp Name", "Alice");
         // The Department field is a lookup — FillFieldAsync types text and tabs;

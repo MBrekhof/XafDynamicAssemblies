@@ -64,17 +64,26 @@ public class Phase03_ValidationTests : IAsyncLifetime
     /// Returns (Saved, ErrorText): Saved=true means save succeeded (no validation error);
     /// Saved=false means validation blocked the save, ErrorText has the message.
     /// </summary>
-    // ponytail: `timeout` is unused in the body — mirrors Python's try_save_and_check_validation,
-    // which takes the same default-3000 parameter and never references it.
-    private async Task<(bool Saved, string ErrorText)> TrySaveAndCheckValidationAsync(int timeout = 3000)
+    /// TEST-007 follow-up: the fixed 1.5 s wait raced the validation popup once the page objects
+    /// stopped over-sleeping; poll for the error up to <paramref name="timeout"/> instead.
+    private async Task<(bool Saved, string ErrorText)> TrySaveAndCheckValidationAsync(int timeout = 8000)
     {
         await _page.Locator("dxbl-toolbar-item > button[data-action-name=\"Save\"], dxbl-bar-item > button[data-action-name=\"Save\"]").First.ClickAsync();
-        await _page.WaitForTimeoutAsync(1500);
 
-        // XAF Blazor shows validation errors in a popup/window with error details.
-        // Check for validation error indicators:
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeout);
+        while (true)
+        {
+            var found = await FindValidationErrorAsync();
+            if (found != null) return (false, found);
+            if (DateTime.UtcNow > deadline) return (true, "");
+            await _page.WaitForTimeoutAsync(250);
+        }
+    }
 
-        // 1. Check for XAF validation result window (contains error messages)
+    /// <summary>The validation error text currently shown, or null.</summary>
+    private async Task<string?> FindValidationErrorAsync()
+    {
+        // 1. XAF validation result window / popup with error details
         var validationWindow = _page.Locator(".dxbl-popup-content, .dxbl-window");
         var windowCount = await validationWindow.CountAsync();
         for (var i = 0; i < windowCount; i++)
@@ -84,11 +93,11 @@ public class Phase03_ValidationTests : IAsyncLifetime
             if (lower.Contains("must be") || lower.Contains("cannot be") || lower.Contains("reserved") ||
                 lower.Contains("conflicts") || lower.Contains("valid") || lower.Contains("error"))
             {
-                return (false, text);
+                return text;
             }
         }
 
-        // 2. Check for any visible popup with validation-related text
+        // 2. Any visible validation-related text on the page
         var bodyText = await _page.Locator("body").InnerTextAsync();
         var validationKeywords = new[]
         {
@@ -102,14 +111,9 @@ public class Phase03_ValidationTests : IAsyncLifetime
         foreach (var keyword in validationKeywords)
         {
             if (bodyText.Contains(keyword))
-                return (false, bodyText);
+                return bodyText;
         }
-
-        // 3. Check if we're still on the detail view (save didn't navigate away)
-        // If a .dxbl-fl-ctrl is still visible, we might still be on detail view
-        // But this alone doesn't confirm validation error
-
-        return (true, "");
+        return null;
     }
 
     // --- TestCustomClassValidation ---
@@ -235,7 +239,6 @@ public class Phase03_ValidationTests : IAsyncLifetime
         await NavToCustomFieldAsync();
         var lv = new ListViewPage(_page);
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
 
         // The TypeName field should default to "System.String" (from the entity default).
         // Also verify the field container exists — XAF renders it with PredefinedValues.

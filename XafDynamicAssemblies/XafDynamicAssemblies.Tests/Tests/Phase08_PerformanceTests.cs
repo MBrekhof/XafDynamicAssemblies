@@ -135,7 +135,6 @@ public class Phase08_PerformanceTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "PerfRecord1");
         await detail.ClickSaveAsync();

@@ -200,7 +200,6 @@ public class Phase04_HotLoadTests : IAsyncLifetime
 
         // Create a test record
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "HotLoadSurvivor");
         await detail.ClickSaveAsync();

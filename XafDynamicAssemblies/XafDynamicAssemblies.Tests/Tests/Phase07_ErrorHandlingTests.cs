@@ -161,7 +161,6 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
 
         // Create a record
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Valid Name", "RecoveryTest1");
         await detail.ClickSaveAsync();
@@ -235,7 +234,6 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
         var (nav, lv) = await NavToCustomClassAsync();
         await DeleteIfExistsAsync("RestartTest");
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", "RestartTest");
         await detail.FillFieldAsync("Navigation Group", "RecoveryGroup");
