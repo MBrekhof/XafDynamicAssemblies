@@ -391,4 +391,4 @@ For internals — the Roslyn compilation pipeline, hot-load sequence, type ident
 
 ## License
 
-This project uses DevExpress XAF, which requires a commercial license. The project code is provided as-is for educational and reference purposes.
+The project code is released under the [MIT License](LICENSE). It depends on DevExpress XAF, which requires a separate commercial license from DevExpress.
