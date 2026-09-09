@@ -2,6 +2,9 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using DevExpress.ExpressApp;
+using DevExpress.ExpressApp.Security;
+using DevExpress.Persistent.Base;
+using DevExpress.Persistent.BaseImpl.EF.PermissionPolicy;
 using LlmTornado.Chat;
 using LlmTornado.Common;
 using Microsoft.Extensions.AI;
@@ -677,56 +680,17 @@ public sealed class SchemaAIToolsProvider
         _logger.LogInformation("[Tool:list_roles] Called");
         try
         {
-            // Use dynamic to avoid hard dependency on DevExpress.ExpressApp.Security
-            Type roleType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                roleType = asm.GetType("DevExpress.Persistent.BaseImpl.EF.PermissionPolicy.PermissionPolicyRole");
-                if (roleType != null) break;
-            }
+            using var scope = CreateObjectSpaceForType(typeof(PermissionPolicyRole));
+            var roles = scope.Os.GetObjectsQuery<PermissionPolicyRole>().OrderBy(r => r.Name).ToList();
+            if (roles.Count == 0)
+                return "No roles found in the application.";
 
-            if (roleType == null)
-                return "Security module is not configured in this application. Role management is not available.";
-
-            var scope = _serviceProvider.CreateScope();
-            IObjectSpace os;
-            try
-            {
-                var factory = scope.ServiceProvider.GetRequiredService<INonSecuredObjectSpaceFactory>();
-                os = factory.CreateNonSecuredObjectSpace(roleType);
-            }
-            catch
-            {
-                scope.Dispose();
-                return "Security module is not configured or INonSecuredObjectSpaceFactory is not available for role types.";
-            }
-
-            using (new ScopedObjectSpace(os, scope))
-            {
-                var roles = os.GetObjects(roleType).Cast<object>().ToList();
-
-                if (roles.Count == 0)
-                    return "No roles found in the application.";
-
-                var sb = new StringBuilder();
-                sb.AppendLine("| Role Name | Is Admin |");
-                sb.AppendLine("|---|---|");
-                foreach (dynamic role in roles)
-                {
-                    try
-                    {
-                        string name = role.Name;
-                        bool isAdmin = role.IsAdministrative;
-                        sb.AppendLine($"| {name} | {(isAdmin ? "Yes" : "No")} |");
-                    }
-                    catch
-                    {
-                        sb.AppendLine($"| (error reading role) | ? |");
-                    }
-                }
-
-                return sb.ToString();
-            }
+            var sb = new StringBuilder();
+            sb.AppendLine("| Role Name | Is Admin |");
+            sb.AppendLine("|---|---|");
+            foreach (var role in roles)
+                sb.AppendLine($"| {role.Name} | {(role.IsAdministrative ? "Yes" : "No")} |");
+            return sb.ToString();
         }
         catch (Exception ex)
         {
@@ -752,118 +716,33 @@ public sealed class SchemaAIToolsProvider
             if (string.IsNullOrWhiteSpace(entityName))
                 return "Error: entityName is required.";
 
-            // Find the role type
-            Type roleType = null;
-            Type permissionType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                roleType ??= asm.GetType("DevExpress.Persistent.BaseImpl.EF.PermissionPolicy.PermissionPolicyRole");
-                permissionType ??= asm.GetType("DevExpress.Persistent.BaseImpl.EF.PermissionPolicy.PermissionPolicyTypePermissionObject");
-                if (roleType != null && permissionType != null) break;
-            }
-
-            if (roleType == null || permissionType == null)
-                return "Security module is not configured in this application. Role management is not available.";
-
-            // Find the target entity type
-            Type targetType = null;
-            // Check runtime types first
-            targetType = XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes
-                .FirstOrDefault(t => t.Name == entityName);
-            // Check compiled types
-            if (targetType == null)
-            {
-                foreach (var typeInfo in XafTypesInfo.Instance.PersistentTypes)
-                {
-                    if (typeInfo.Name == entityName)
-                    {
-                        targetType = typeInfo.Type;
-                        break;
-                    }
-                }
-            }
-
+            // Runtime types first, then compiled (simple-name convention used throughout).
+            var targetType = XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes.FirstOrDefault(t => t.Name == entityName)
+                ?? XafTypesInfo.Instance.PersistentTypes.FirstOrDefault(ti => ti.Name == entityName)?.Type;
             if (targetType == null)
                 return $"Error: Entity '{entityName}' not found among runtime or compiled types.";
 
-            // Find SecurityStrategyComplex operations enum
-            Type operationsEnum = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                operationsEnum = asm.GetType("DevExpress.Persistent.Base.SecurityStrategyOperations");
-                if (operationsEnum != null) break;
-            }
-
-            using var scopedOs = CreateObjectSpaceForType(roleType);
-            var os = scopedOs.Os;
-
-            // Find the role
-            dynamic role = os.GetObjects(roleType).Cast<object>()
-                .FirstOrDefault(r => ((dynamic)r).Name == roleName);
-
+            using var scope = CreateObjectSpaceForType(typeof(PermissionPolicyRole));
+            var os = scope.Os;
+            var role = os.GetObjectsQuery<PermissionPolicyRole>().FirstOrDefault(r => r.Name == roleName);
             if (role == null)
             {
-                var availableRoles = string.Join(", ",
-                    os.GetObjects(roleType).Cast<object>().Select(r => ((dynamic)r).Name?.ToString()));
+                var availableRoles = string.Join(", ", os.GetObjectsQuery<PermissionPolicyRole>().Select(r => r.Name).OrderBy(n => n));
                 return $"Role '{roleName}' not found. Available roles: {(string.IsNullOrEmpty(availableRoles) ? "none" : availableRoles)}";
             }
 
-            // Use XAF's permission policy API
-            // PermissionPolicyRole has EnsureTypePermissions / SetTypePermission methods
-            try
-            {
-                // Build operations string
-                var ops = new List<string>();
-                if (allowRead) ops.Add("Read");
-                if (allowWrite) ops.Add("Write");
-                if (allowCreate) ops.Add("Create");
-                if (allowDelete) ops.Add("Delete");
-                var operationsStr = string.Join(";", ops);
-
-                // Use the AddTypePermission approach via reflection
-                // PermissionPolicyRole.AddTypePermissionsRecursively<T>(string operations, SecurityPermissionState state)
-                var addMethod = roleType.GetMethods()
-                    .FirstOrDefault(m => m.Name == "AddTypePermissionsRecursively" && m.GetParameters().Length == 2 && !m.IsGenericMethod);
-
-                if (addMethod != null)
-                {
-                    // Get SecurityPermissionState.Allow
-                    Type stateEnum = null;
-                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        stateEnum = asm.GetType("DevExpress.Persistent.Base.SecurityPermissionState");
-                        if (stateEnum != null) break;
-                    }
-
-                    if (stateEnum != null)
-                    {
-                        var allowState = Enum.Parse(stateEnum, "Allow");
-                        var denyState = Enum.Parse(stateEnum, "Deny");
-
-                        // Set allowed operations
-                        if (ops.Count > 0)
-                            addMethod.Invoke(role, new object[] { targetType, operationsStr, allowState });
-
-                        // Set denied operations
-                        var denyOps = new List<string>();
-                        if (!allowRead) denyOps.Add("Read");
-                        if (!allowWrite) denyOps.Add("Write");
-                        if (!allowCreate) denyOps.Add("Create");
-                        if (!allowDelete) denyOps.Add("Delete");
-
-                        if (denyOps.Count > 0)
-                            addMethod.Invoke(role, new object[] { targetType, string.Join(";", denyOps), denyState });
-                    }
-                }
-                else
-                {
-                    return "Error: Could not find AddTypePermissionsRecursively method on the role type. Security API may have changed.";
-                }
-            }
-            catch (Exception ex)
-            {
-                return $"Error setting permissions via API: {ex.Message}";
-            }
+            // AI-004: AddTypePermissionsRecursively is a static extension in DevExpress.ExpressApp.Security
+            // (PermissionSettingHelper); the old reflection looked for an instance method and could never succeed.
+            var allow = new List<string>();
+            var deny = new List<string>();
+            (allowRead ? allow : deny).Add(SecurityOperations.Read);
+            (allowWrite ? allow : deny).Add(SecurityOperations.Write);
+            (allowCreate ? allow : deny).Add(SecurityOperations.Create);
+            (allowDelete ? allow : deny).Add(SecurityOperations.Delete);
+            if (allow.Count > 0)
+                role.AddTypePermissionsRecursively(targetType, string.Join(SecurityOperations.Delimiter, allow), SecurityPermissionState.Allow);
+            if (deny.Count > 0)
+                role.AddTypePermissionsRecursively(targetType, string.Join(SecurityOperations.Delimiter, deny), SecurityPermissionState.Deny);
 
             os.CommitChanges();
 
