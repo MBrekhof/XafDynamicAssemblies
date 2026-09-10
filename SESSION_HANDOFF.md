@@ -1,11 +1,12 @@
 # Session Handoff — XafDynamicAssemblies
 
-## Current Status: all 27 Codex-review cards + DATA-007 fixed on branch `fix/codex-review-2026-09` (pushed, NOT merged). TODO.md is empty.
-## Next: review the branch and merge to master (user's call). Master itself still has 4 unpushed commits (SEC-004, 71bd193..5b52174) underneath the branch.
+## Current Status: all 27 Codex-review cards + DATA-007 merged to master (c8895ea, 2026-09-10) and pushed. TODO.md is empty; only `master` exists (both stale branches deleted).
+## Next: nothing queued. Confirm the Review-column cards on the board when convenient; BACKBURNER.md has the future ideas.
 
 ### Session 2026-09-09/10 — the fixing spree (loop session, Codex consulted per card)
 
-Branch `fix/codex-review-2026-09`, 29 commits on top of master, one per card (shared files were
+Branch `fix/codex-review-2026-09` (merged to master as c8895ea after review, then deleted along
+with the long-dead `feature/ai-schema-assistant`), 29 commits, one per card (shared files were
 split by hunk), plus docs. Every card: plan or diff reviewed by Codex via the codex plugin
 (`codex-companion.mjs task` for plans, `review --scope working-tree` for diffs); every catch
 that changed the code is recorded in the DONE.md entry and the commit message. Board: all
