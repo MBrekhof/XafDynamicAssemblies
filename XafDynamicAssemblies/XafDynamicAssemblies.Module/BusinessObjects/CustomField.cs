@@ -53,6 +53,24 @@ namespace XafDynamicAssemblies.Module.BusinessObjects
         [Browsable(false)]
         public bool IsTypeNameValid => string.IsNullOrWhiteSpace(TypeName) || SupportedTypes.IsSupported(TypeName);
 
+        [RuleFromBoolProperty("CustomField_NameLength", DefaultContexts.Save,
+            "Field Name cannot be longer than 61 characters (PostgreSQL identifier limit, incl. the 'Id' FK suffix).")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsFieldNameLengthValid => string.IsNullOrWhiteSpace(FieldName) || FieldName.Length + 2 <= MetadataValidator.MaxPgIdentifier;
+
+        [RuleFromBoolProperty("CustomField_NotKeyword", DefaultContexts.Save,
+            "Field Name cannot be a C# keyword.")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsFieldNameNotKeyword => string.IsNullOrWhiteSpace(FieldName) || !CustomClassValidation.IsCSharpKeyword(FieldName);
+
+        [RuleFromBoolProperty("CustomField_ValidReferencedClassName", DefaultContexts.Save,
+            "Referenced Class Name must be a valid C# identifier.")]
+        [NotMapped]
+        [Browsable(false)]
+        public bool IsReferencedClassNameValid => string.IsNullOrWhiteSpace(ReferencedClassName) || CustomClassValidation.IsValidIdentifier(ReferencedClassName);
+
         [RuleFromBoolProperty("CustomField_ReferenceRequiresClass", DefaultContexts.Save,
             "A Reference field requires a Referenced Class Name.")]
         [NotMapped]

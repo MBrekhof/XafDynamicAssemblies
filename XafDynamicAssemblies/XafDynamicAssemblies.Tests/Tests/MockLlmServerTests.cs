@@ -200,3 +200,42 @@ public class MockLlmServerTests : IAsyncLifetime
         Assert.False(input.GetProperty("isActive").GetBoolean());
     }
 }
+
+/// <summary>
+/// TEST-011: every tool_use input key the mock emits must be a real parameter of the C# tool
+/// method it targets (AIFunctionFactory takes the schema keys from the parameter names). Ends
+/// the create_entity (TEST-002) / describe_entity (TEST-011) drift class for good.
+/// </summary>
+public class MockToolContractTests
+{
+    private static readonly string[] SamplePrompts =
+    {
+        "list all entities", "list roles", "show the fields of 'Customer'", "what are the pending changes",
+        "validate the schema", "create a 'Widget' entity", "yes",
+        "list the actions on 'SchemaHistory'", "create an 'Approve' action on 'SchemaHistory'",
+        "disable the 'Approve' action on 'SchemaHistory'", "delete the 'Approve' action on 'SchemaHistory'",
+    };
+
+    [Fact]
+    public void Every_mock_tool_use_key_matches_a_real_tool_parameter()
+    {
+        var matcher = new ScriptMatcher();
+        var seenTools = new HashSet<string>();
+        foreach (var prompt in SamplePrompts)
+        {
+            var reply = matcher.Match(prompt);
+            if ((string)reply["type"] != "tool_use") continue;
+            var tool = (string)reply["name"];
+            seenTools.Add(tool);
+            var methodName = string.Concat(tool.Split('_').Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+            var method = typeof(XafDynamicAssemblies.Module.Services.SchemaAIToolsProvider)
+                .GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.True(method != null, $"mock targets tool '{tool}' but SchemaAIToolsProvider has no method '{methodName}'");
+            var parameters = method!.GetParameters().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            foreach (var key in ((Dictionary<string, object>)reply["input"]).Keys)
+                Assert.True(parameters.Contains(key), $"mock sends '{key}' to {tool}, real parameters: {string.Join(", ", parameters)}");
+        }
+        Assert.Contains("describe_entity", seenTools);
+        Assert.Contains("create_entity", seenTools);
+    }
+}

@@ -1,5 +1,137 @@
 # DONE — XafDynamicAssemblies
 
+#### DATA-007: Startup guard drops metadata fields whose TypeName or FK target disagrees with the live column (ID: 1598)
+
+**Completed: 2026-09-10, commit 208c31c (branch fix/codex-review-2026-09).** `Module/Validation/SchemaGuard.cs`:
+pure `FindMismatch` + `Sanitize` (two catalog queries scoped to `public`, per-field probe isolation, missing
+target tables skipped), called from `QueryMetadata` before Roslyn; `SkippedFieldWarnings` reset on every query
+and in `ResetForRestart`, appended to `validate_schema` output. Three deviations from the card, each agreed with
+Codex: "uuid + data + no FK" counts only *dangling* ids (NULLs and valid ids satisfy an FK; any-data would drop
+healthy fields); an FK retarget is judged only when the referenced class is a runtime table (a compiled target's
+table is whatever the DbContext maps, e.g. `CustomClasses`); a column type outside the guard's vocabulary
+(`date`, `money`) passes. Limitation recorded in the class comment: a skipped required reference leaves its
+NOT NULL column without a default, so reads recover while inserts still fail. 15 unit tests; Phase07
+Test_04b flips a deployed field's TypeName via SQL, deploys and asserts the ListView loads without that column.
+
+#### DATA-003: Required-column ADD COLUMN fails on populated tables and the orchestrator deploys anyway (ID: 1561)
+
+**Completed: 2026-09-10, commit 02ed2b0 (branch fix/codex-review-2026-09).** SchemaSynchronizer isolates each class (aggregated failure message), `byte[]` default is `'\x'::bytea`, and a required reference on a populated table is refused with a clear message: Codex's diff review showed that "add as NULL" (the card's own fix) would leave rows EF cannot materialize into the non-nullable Guid, breaking reads. `ExecuteHotLoadAsync` returns the error and stops after a DDL failure (no compile, no RestartNeeded, no exit-42); `SchemaChangeController` awaits it (documented XAF Blazor `async void` Execute shape, dxdocs 404738) and shows an XAF error toast. Phase07 Test_01 rewritten to assert the toast; Phase05 + Phase07 green.
+
+#### DATA-005: Schema export drops every IsDefaultField field entirely; import loses a real column per AI-created entity (ID: 1564)
+
+**Completed: 2026-09-10, commit abf1190 (branch fix/codex-review-2026-09).** Removed the `!IsDefaultField` export filter and the matching removal guard; `CustomFieldDto.IsDefaultField` round-trips. Package version 1.1; a legacy 1.0 import keeps existing default fields instead of deleting them (Codex review catch: those packages omitted the field deliberately).
+
+#### DATA-002: XAF DB updater drops columns the additive SchemaSynchronizer promises to keep (ID: 1556)
+
+**Completed: 2026-09-10, commit 8b2eec4 (branch fix/codex-review-2026-09).** `SchemaUpdateOptions.DisableAlterAndDeleteOperations = true` in `AddSecuredEFCore` (verified in DX 26.1 `EFCoreDatabaseSchemaUpdater.RemoveAlterAndDeleteOperations`); `SchemaSynchronizer` class comment records the contract.
+
+#### PERF-001: Every new Blazor circuit bumps ModelVersion and rebuilds an identical EF model (ID: 1562)
+
+**Completed: 2026-09-10, commit 0ad032b (branch fix/codex-review-2026-09).** `RuntimeEntityTypes` setter ignores a same-instance assignment; `BootstrapRuntimeEntities` fast path for later circuits (fill AdditionalExportedTypes, seed the orchestrator's known type names — Codex catch — skip QueryMetadata/DDL/compile). Phase08 Test_03 now opens three circuits concurrently (TEST-012).
+
+#### DATA-004: QueryMetadata drops seven CustomField UI properties, so hidden/read-only/size/tooltip settings never compile (ID: 1563)
+
+**Completed: 2026-09-10, commit d785811 (branch fix/codex-review-2026-09).** QueryMetadata reads the seven UI columns. Reading them exposed that the generator emitted `[DevExpress.Persistent.Base.Size]` and `[DevExpress.ExpressApp.Editors.Editable]`, which do not exist in 26.1 (Codex review; confirmed with a Roslyn compile probe) — both generators now emit `[DevExpress.ExpressApp.DC.FieldSize]` and `[ModelDefault("AllowEdit","False")]`; `GeneratedAttributeCompileTests` compiles a class with every attribute; Phase09 Test_18 assertions updated.
+
+#### AI-002: modify_entity with a partial field payload silently flips IsRequired to false (ID: 1565)
+
+**Completed: 2026-09-10, commit 51445a5 (branch fix/codex-review-2026-09).** `FieldDefinition.Required` is `bool?`; updateFields assigns only when present, create/add default false.
+
+#### ACT-003: A failing step leaves earlier SetField mutations pending; next Save persists a half-applied action (ID: 1566)
+
+**Completed: 2026-09-10, commit a91fd9f (branch fix/codex-review-2026-09).** Two-pass `CustomAction_Execute`: resolve every member/value/OpenView target (return on first error), then apply SetValues, show messages, commit. No Rollback. Type resolution extracted to `ResolveEntityType`.
+
+#### DATA-006: Identifiers over 63 bytes make SchemaSynchronizer non-idempotent (table/column checks and FK names) (ID: 1567)
+
+**Completed: 2026-09-10, commit f529379 (branch fix/codex-review-2026-09).** `SchemaSynchronizer.PgName` (63-byte truncation) on existence checks and FK constraint names; `ConstraintExists` scoped to the owning table (Codex: two long names can truncate to one constraint name). `MetadataValidator` + UI rules cap ClassName at 63 and FieldName at 61 (room for the `Id` companion).
+
+#### AI-003: Polly retry never fires for the configured TimeoutSeconds (TimeoutRejectedException not in ShouldHandle) (ID: 1568)
+
+**Completed: 2026-09-10, commit 0369a1b (branch fix/codex-review-2026-09).** `Polly.Timeout.TimeoutRejectedException` added to `ShouldHandle`.
+
+#### AI-004: set_role_permissions reflects for an instance method that is a static extension; can never succeed (ID: 1580)
+
+**Completed: 2026-09-10, commit 510df73 (branch fix/codex-review-2026-09).** Reflection replaced by direct calls: `PermissionPolicyRole`, `SecurityOperations`, `role.AddTypePermissionsRecursively(targetType, ops, SecurityPermissionState.Allow/Deny)` (signature verified in DX 26.1 `PermissionSettingHelper.cs:187`). `list_roles` simplified the same way.
+
+#### TEST-004: Phase04 depends on Phase02's Customer with no class ordering; works by file-name coincidence (ID: 1569)
+
+**Completed: 2026-09-10, commit 2dfd148 (branch fix/codex-review-2026-09).** `Phase04.Test_00_EnsureCustomerExists` inserts Customer + Name via `DatabaseHelper.InsertClassViaDb`/`InsertFieldViaDb` when the live row is missing; Test_01's Deploy compiles it.
+
+#### TEST-005: WaitForDeployRestartAsync can pass against the old server; add an /_instance marker and wait for it to change (ID: 1570)
+
+**Completed: 2026-09-10, commit b2599ff (branch fix/codex-review-2026-09).** `GET /_instance` (per-process GUID, anonymous) in Startup; `ClickDeploySchemaAsync` records it and `WaitForDeployRestartAsync` polls until it changes (bounded by serverTimeoutSeconds), replacing the two fixed sleeps.
+
+#### TEST-006: AIChatPanel.WaitForResponseAsync accepts the previous turn's answer on multi-turn tests (ID: 1571)
+
+**Completed: 2026-09-10, commit d6059df (branch fix/codex-review-2026-09).** `SendMessageAsync` captures the assistant-message count before Enter; `WaitForResponseAsync(timeout, before)` requires `count > before`; `ClickSuggestionAsync` exposes `LastSentAssistantCount`.
+
+#### TEST-007: WaitForLoadingAsync is a 500 ms sleep on Blazor Server; FindInputByLabelAsync never auto-waits (ID: 1572)
+
+**Completed: 2026-09-10, commit d9b862c (branch fix/codex-review-2026-09).** `FindInputByLabelAsync`/`FindContainerByLabelAsync` use one auto-waiting `:is(input, textarea)` locator; `ClickNewAsync` waits for `.dxbl-fl-ctrl`; 16 post-New 2000 ms sleeps deleted. Follow-up: Phase03's save-and-check helper polls for the validation error (bounded 8 s) instead of a fixed 1.5 s the faster flow raced (3 failures in the first full run, green on rerun). Full regression 34 min (was 37).
+
+#### TEST-008: Phase06 graduation assertion reads an unfiltered CustomClasses row; soft-deleted GradTest from a prior run can satisfy it (ID: 1573)
+
+**Completed: 2026-09-10, commit c85ac41 (branch fix/codex-review-2026-09).** GCRecord filter on the GradTest read plus an exactly-one-live-row assertion.
+
+#### TEST-010: Phase04 Test_04_AddFieldViaNestedGrid cannot fail (swallowed try/catch, Assert.True(true) both branches) (ID: 1575)
+
+**Completed: 2026-09-10, commit 743e83b (branch fix/codex-review-2026-09).** try/catch and both-branches-true removed. Live DOM check (Playwright MCP): the DetailView ribbon has no New (bar-items); the nested Fields ListView toolbar renders its New as `dxbl-toolbar-item > button[data-action-name="New"]` — the test targets that and asserts the ProductName row. Green.
+
+#### HOT-001: Hot-load swaps live CLR types in the dying process; delete the in-process swap (ID: 1557)
+
+**Completed: 2026-09-10, commit ae4fd56 (branch fix/codex-review-2026-09).** `ExecuteHotLoadAsync` uses `ValidateCompilation` (nothing loaded into the process), then RestartNeeded + notify; steps 4–6 and `RegisterTypesInTypesInfo` deleted, `RefreshRuntimeTypes` private. Also: a compile failure no longer restarts into degraded mode — the running process still has the previous working type set, so it keeps serving and the Deploy toast shows the errors.
+
+#### CFG-001: EasyTest build switches EF's connection string but bootstrap/DDL still use ConnectionString (ID: 1559)
+
+**Completed: 2026-09-10, commit 963c3ea (branch fix/codex-review-2026-09).** One `connectionString` local at the top of `ConfigureServices` (EASYTEST override applied there) feeds `RuntimeConnectionString` and `UseNpgsql`; duplicated lookup in `WithDbContext` deleted.
+
+#### TEST-003: Regression suite runs destructive SQL against the app's only database; add a localhost guard (ID: 1558)
+
+**Completed: 2026-09-10, commit 69862e2 (branch fix/codex-review-2026-09).** `DatabaseHelper.GetConnection` throws unless host is localhost/127.0.0.1/::1 and the database is `XafDynamicAssemblies`.
+
+#### TEST-009: Phase11 Test_18 asserts zero CustomActionSteps table-wide after deleting one action (ID: 1574)
+
+**Completed: 2026-09-10, commit 52ed34c (branch fix/codex-review-2026-09).** Action ID captured before the delete turn; the step poll counts `CustomActionId = @id` only.
+
+#### TEST-011: Mock describe_entity emits class_name but the tool parameter is entityName (same drift class as TEST-002) (ID: 1576)
+
+**Completed: 2026-09-10, commit f2033d3 (branch fix/codex-review-2026-09).** `ScriptMatcher` sends `entityName`; `MockToolContractTests` runs sample prompts through the matcher and asserts every tool_use input key is a parameter of the C# tool method (mapped by snake→Pascal name).
+
+#### TEST-012: Phase08 Test_03_ConcurrentPageAccess does no concurrent work (ID: 1577)
+
+**Completed: 2026-09-10, commit e67de1e (branch fix/codex-review-2026-09).** Three `BrowserFixture.NewPageAsync()` contexts navigate to PerfTest00..02 via `Task.WhenAll`; each must render `.dxbl-grid`.
+
+#### TEST-013: Live AI tests report Passed instead of Skipped when AI_TEST_API_KEY is unset (ID: 1578)
+
+**Completed: 2026-09-10, commit 829a489 (branch fix/codex-review-2026-09).** `Xunit.SkippableFact` 1.5.*, five `[SkippableFact]` + `Skip.If`; unfiltered run now reports 5 Skipped.
+
+#### CTRL-001: Graduation controllers subscribe anonymous handlers in OnActivated with no OnDeactivated (ID: 1579)
+
+**Completed: 2026-09-10, commit a7ee201 (branch fix/codex-review-2026-09).** Named handlers + `OnDeactivated` unsubscription in both graduation warning controllers (events verified as plain `EventHandler` in the 26.1 sources).
+
+#### SEC-003: Metadata strings are interpolated raw into generated C# (code injection via ReferencedClassName/TypeName) (ID: 1554)
+
+**Completed: 2026-09-09, commit 0be7d4c (branch fix/codex-review-2026-09).** New
+`Module/Validation/MetadataValidator.cs` is the one guard every path converges on: identifier,
+keyword, reserved name, supported type, reference target, duplicate / FK-companion (`XId`) /
+class-name collisions. `RuntimeAssemblyBuilder.ValidateCompilation` and `Compile` run it before any
+source is generated and report failures as `Errors` (not throw — `EarlyBootstrap` has no guard, so a
+throw would take the process down on one bad row; a failed result already routes to DegradedMode /
+validate_schema). `GenerateSource` and `GraduationService.GenerateGraduationSource` throw as a hard
+backstop. String metadata goes through `SymbolDisplay.FormatLiteral`; graduation descriptions are
+flattened to one comment line; `MapToClrTypeName` no longer falls through. Codex plan review added
+three catches that landed: identifier regexes anchored with `\z` (trailing newline bypassed `$`),
+the collision checks, and blank-name rejection. 22 unit tests in `MetadataValidatorTests`.
+
+#### AI-001: create_entity/modify_entity commit metadata without identifier/type validation; one bad row degrades every runtime entity (ID: 1560)
+
+**Completed: 2026-09-09, commit 64d3a46 (branch fix/codex-review-2026-09).** `CreateEntity` and
+`ModifyEntity` call `MetadataValidator.Validate(cc)` right before `CommitChanges()` and return the
+message instead of saving. `modify_entity` also removes a deleted field from the in-memory collection
+first. Codex diff review caught that EF relationship fixup plus the explicit `Fields.Add` can hold the
+same tracked instance twice, so the validator iterates `Distinct()` instances (EF `BaseObject` does
+not override `Equals`, verified in the 26.1 sources).
+
 #### SEC-004: No authentication anywhere; OData metadata CRUD and exposed entities are anonymous (ID: 1555)
 
 **Completed: 2026-09-08, commit 71bd193.** Decision: real security (option a), "nobody should

@@ -27,6 +27,9 @@ namespace XafDynamicAssemblies.Blazor.Server
 {
     public class Startup
     {
+        /// <summary>Identifies this process instance; served at /_instance (see UseEndpoints).</summary>
+        private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -48,9 +51,15 @@ namespace XafDynamicAssemblies.Blazor.Server
             services.AddDevExpressAI();
             services.AddScoped<Module.Services.ISchemaFileService, Services.BlazorSchemaFileService>();
             services.AddScoped<CircuitHandler, CircuitHandlerProxy>();
-            // Set connection string for runtime entity bootstrap (before XAF initializes)
-            XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString =
-                Configuration.GetConnectionString("ConnectionString");
+            // CFG-001: resolve the connection string ONCE; EF Core, the runtime-entity bootstrap
+            // and SchemaSynchronizer must all hit the same database (the EASYTEST override used
+            // to switch only EF, sending DDL to the ordinary DB).
+            var connectionString = Configuration.GetConnectionString("ConnectionString");
+#if EASYTEST
+            connectionString = Configuration.GetConnectionString("EasyTestConnectionString") ?? connectionString;
+#endif
+            ArgumentNullException.ThrowIfNull(connectionString);
+            XafDynamicAssemblies.Module.XafDynamicAssembliesModule.RuntimeConnectionString = connectionString;
 
             // Early bootstrap: compile runtime types before XAF init so they're available
             // for Web API endpoint registration below. BootstrapRuntimeEntities (in Module.Setup)
@@ -87,6 +96,10 @@ namespace XafDynamicAssemblies.Blazor.Server
                     .AddSecuredEFCore(options =>
                     {
                         options.PreFetchReferenceProperties();
+                        // DATA-002: the XAF updater (debugger / --updateDatabase) must be add-only like
+                        // SchemaSynchronizer; without this it emits DropColumnOperation for a deleted
+                        // runtime field and destroys the column's data on the next F5.
+                        options.SchemaUpdateOptions.DisableAlterAndDeleteOperations = true;
                     })
                     .WithDbContext<XafDynamicAssemblies.Module.BusinessObjects.XafDynamicAssembliesEFCoreDbContext>((serviceProvider, options) =>
                     {
@@ -94,17 +107,6 @@ namespace XafDynamicAssemblies.Blazor.Server
                         // Do not use this code in production environment to avoid data loss.
                         // We recommend that you refer to the following help topic before you use an in-memory database: https://docs.microsoft.com/en-us/ef/core/testing/in-memory
                         //options.UseInMemoryDatabase();
-                        string connectionString = null;
-                        if (Configuration.GetConnectionString("ConnectionString") != null)
-                        {
-                            connectionString = Configuration.GetConnectionString("ConnectionString");
-                        }
-#if EASYTEST
-                        if(Configuration.GetConnectionString("EasyTestConnectionString") != null) {
-                            connectionString = Configuration.GetConnectionString("EasyTestConnectionString");
-                        }
-#endif
-                        ArgumentNullException.ThrowIfNull(connectionString);
                         options.UseNpgsql(connectionString);
                         options.ReplaceService<IModelCacheKeyFactory, DynamicModelCacheKeyFactory>();
                         options.UseChangeTrackingProxies();
@@ -264,6 +266,9 @@ namespace XafDynamicAssemblies.Blazor.Server
                 endpoints.MapBlazorHub();
                 endpoints.MapHub<SchemaUpdateHub>("/schemaUpdateHub");
                 endpoints.MapControllers();
+                // TEST-005: per-process marker so a deploy/restart wait can observe that a NEW
+                // process answers (readiness by "HTTP < 500" alone passed against the old one).
+                endpoints.MapGet("/_instance", () => InstanceId).AllowAnonymous();
                 endpoints.MapFallbackToPage("/_Host");
             });
 

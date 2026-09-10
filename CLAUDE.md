@@ -59,7 +59,9 @@ Two metadata tables drive everything:
 
 **Startup sequence:** Query metadata → Roslyn compiles all runtime classes into one assembly → `AssemblyLoadContext` loads it → TypesInfo registers types → EF Core model rebuilt → XAF views auto-generated.
 
-**Hot-load sequence (no restart):** `SchemaSynchronizer` runs DDL → Roslyn recompiles → drain active UoW → unload old ALC → load new ALC → rebuild EF Core IModel → refresh TypesInfo → SignalR push to clients.
+**Deploy sequence:** `SchemaGuard` sanitizes metadata → `SchemaSynchronizer` runs DDL → Roslyn validates (nothing is loaded into the running process, HOT-001) → `RestartNeeded` → SignalR push → exit 42 → the new process recompiles in `EarlyBootstrap`. A DDL or compile failure aborts the deploy with an XAF error toast and no restart (DATA-003); the process keeps serving the previous type set. Tests detect the new process via `GET /_instance`.
+
+**Generated attributes (DATA-004):** the generators emit `[DevExpress.ExpressApp.DC.FieldSize(n)]` for `StringMaxLength` and `[ModelDefault("AllowEdit","False")]` for `IsEditable = false`; `DevExpress.Persistent.Base.Size` and `DevExpress.ExpressApp.Editors.Editable` do not exist in 26.1. `GeneratedAttributeCompileTests` compiles a class carrying every attribute.
 
 ### Key Implementation Classes
 
@@ -69,7 +71,9 @@ Two metadata tables drive everything:
 | `AssemblyGenerationManager` | Manages versioned collectible ALCs, drain/unload/load lifecycle |
 | `DynamicModelCacheKeyFactory` | Forces EF Core model rebuild via ModelVersion counter |
 | `SchemaSynchronizer` | Executes DDL (ALTER TABLE) against PostgreSQL before assembly rebuild |
-| `SchemaChangeOrchestrator` | Coordinates hot-load: DDL → compile → restart via exit code 42 |
+| `SchemaChangeOrchestrator` | Coordinates deploy: DDL → validate-compile → restart via exit code 42; returns the error string on abort |
+| `MetadataValidator` | The single metadata guard (identifiers, keywords, types, collisions, 63-byte names) used by the generator, graduation and the AI tools |
+| `SchemaGuard` | Startup guard: drops fields whose live column disagrees with the metadata type/FK target (DATA-007); warnings surface in `validate_schema` |
 | `GraduationService` | Generates production C# source + DbContext snippet for graduating entities |
 | `AIChatService` | LLMTornado integration, conversation history, tool loop, Polly retry |
 | `SchemaAIToolsProvider` | 14 AI tools for schema CRUD, role management, and metadata actions |
@@ -136,6 +140,7 @@ System.Byte[]   → bytea
 ## File Locations
 
 - Entities: `Module/BusinessObjects/CustomClass.cs`, `CustomField.cs`
+- Validation: `Module/Validation/MetadataValidator.cs` (all paths), `SchemaGuard.cs` (startup column/FK guard), `CustomClassValidation.cs`, `CustomFieldValidation.cs`
 - DbContext: `Module/BusinessObjects/XafDynamicAssembliesDbContext.cs`
 - Runtime assembly: `Module/Services/RuntimeAssemblyBuilder.cs`, `AssemblyGenerationManager.cs`
 - Hot-load: `Module/Services/SchemaChangeOrchestrator.cs`, `Module/Controllers/SchemaChangeController.cs`
@@ -153,4 +158,5 @@ System.Byte[]   → bytea
 - Metadata Actions dispatcher: `Module/Controllers/MetadataActionDispatcherController.cs`
 - Metadata Actions converter: `Module/Services/StepValueConverter.cs`
 - Metadata Actions tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests/Tests/Phase12_ActionBuilderTests.cs`, `StepValueConverterTests.cs`
-- Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (Playwright .NET/xUnit, page objects in `Pages/`)
+- Tests: `XafDynamicAssemblies/XafDynamicAssemblies.Tests` (Playwright .NET/xUnit, page objects in `Pages/`); unit tests without a browser: `MetadataValidatorTests`, `SchemaGuardTests`, `GeneratedAttributeCompileTests`, `StepValueConverterTests`, `MockLlmServerTests`/`MockToolContractTests`
+- Test guard: `DatabaseHelper.GetConnection` refuses any host but localhost and any database but `XafDynamicAssemblies` (the suite runs destructive SQL by design)

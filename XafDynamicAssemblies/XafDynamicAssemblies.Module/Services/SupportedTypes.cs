@@ -42,7 +42,8 @@ namespace XafDynamicAssemblies.Module.Services
                 "System.Boolean" => "false",
                 "System.DateTime" => "CURRENT_TIMESTAMP",
                 "System.Guid" => "gen_random_uuid()",
-                _ => "NULL"
+                "System.Byte[]" => @"'\x'::bytea",
+                _ => throw new ArgumentException($"No default for CLR type: {clrTypeName}")
             };
         }
     }

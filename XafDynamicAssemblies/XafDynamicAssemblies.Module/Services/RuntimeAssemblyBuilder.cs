@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using XafDynamicAssemblies.Module.BusinessObjects;
+using XafDynamicAssemblies.Module.Validation;
 
 namespace XafDynamicAssemblies.Module.Services
 {
@@ -30,6 +31,11 @@ namespace XafDynamicAssemblies.Module.Services
             var result = new CompilationResult();
 
             if (classes.Count == 0)
+                return result;
+
+            // SEC-003: refuse to emit source for metadata that fails identifier/type validation.
+            result.Errors.AddRange(MetadataValidator.ValidateAll(classes));
+            if (!result.Success)
                 return result;
 
             var syntaxTrees = new List<SyntaxTree>();
@@ -77,6 +83,11 @@ namespace XafDynamicAssemblies.Module.Services
                 result.RuntimeTypes = Array.Empty<Type>();
                 return result;
             }
+
+            // SEC-003: refuse to emit source for metadata that fails identifier/type validation.
+            result.Errors.AddRange(MetadataValidator.ValidateAll(classes));
+            if (!result.Success)
+                return result;
 
             // Generate source for each class
             var syntaxTrees = new List<SyntaxTree>();
@@ -134,6 +145,11 @@ namespace XafDynamicAssemblies.Module.Services
         /// </summary>
         public static string GenerateSource(CustomClass cc)
         {
+            // Every metadata string below is interpolated into C# source; nothing unvalidated gets here.
+            var invalid = MetadataValidator.Validate(cc);
+            if (invalid != null)
+                throw new InvalidOperationException($"{cc.ClassName}: {invalid}");
+
             var sb = new StringBuilder();
             sb.AppendLine("using System;");
             sb.AppendLine("using System.ComponentModel;");
@@ -150,7 +166,7 @@ namespace XafDynamicAssemblies.Module.Services
             // Class attributes
             sb.AppendLine("    [DefaultClassOptions]");
             if (!string.IsNullOrWhiteSpace(cc.NavigationGroup))
-                sb.AppendLine($"    [NavigationItem(\"{EscapeString(cc.NavigationGroup)}\")]");
+                sb.AppendLine($"    [NavigationItem({Literal(cc.NavigationGroup)})]");
 
             // Find the default property (first IsDefaultField, or first string field, or first field)
             var defaultField = FindDefaultProperty(cc);
@@ -192,7 +208,7 @@ namespace XafDynamicAssemblies.Module.Services
                         nullable = "";
 
                     if (field.TypeName == "System.String" && field.StringMaxLength.HasValue)
-                        sb.AppendLine($"        [DevExpress.Persistent.Base.Size({field.StringMaxLength.Value})]");
+                        sb.AppendLine($"        [DevExpress.ExpressApp.DC.FieldSize({field.StringMaxLength.Value})]");
 
                     sb.AppendLine($"        public virtual {clrType}{nullable} {field.FieldName} {{ get; set; }}");
                 }
@@ -233,11 +249,11 @@ namespace XafDynamicAssemblies.Module.Services
             if (!field.IsVisibleInDetailView)
                 sb.AppendLine("        [VisibleInDetailView(false)]");
             if (!field.IsEditable)
-                sb.AppendLine("        [DevExpress.ExpressApp.Editors.Editable(false)]");
+                sb.AppendLine("        [DevExpress.ExpressApp.Model.ModelDefault(\"AllowEdit\", \"False\")]");
             if (!string.IsNullOrWhiteSpace(field.ToolTip))
-                sb.AppendLine($"        [ToolTip(\"{EscapeString(field.ToolTip)}\")]");
+                sb.AppendLine($"        [ToolTip({Literal(field.ToolTip)})]");
             if (!string.IsNullOrWhiteSpace(field.DisplayName))
-                sb.AppendLine($"        [DisplayName(\"{EscapeString(field.DisplayName)}\")]");
+                sb.AppendLine($"        [DisplayName({Literal(field.DisplayName)})]");
         }
 
         private static bool IsReferenceField(CustomField field)
@@ -260,7 +276,7 @@ namespace XafDynamicAssemblies.Module.Services
                 "System.DateTime" => "DateTime",
                 "System.Guid" => "Guid",
                 "System.Byte[]" => "byte[]",
-                _ => typeName
+                _ => throw new InvalidOperationException($"Unsupported type '{typeName}'")
             };
         }
 
@@ -276,10 +292,8 @@ namespace XafDynamicAssemblies.Module.Services
             return IsValueType(typeName);
         }
 
-        private static string EscapeString(string s)
-        {
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        }
+        /// <summary>Quoted C# string literal; Roslyn escapes quotes, backslashes, newlines and control characters.</summary>
+        private static string Literal(string s) => SymbolDisplay.FormatLiteral(s, quote: true);
 
         private static List<MetadataReference> GetMetadataReferences()
         {

@@ -28,19 +28,31 @@ namespace XafDynamicAssemblies.Module.Controllers
             _deployAction.Execute += DeployAction_Execute;
         }
 
-        private void DeployAction_Execute(object sender, SimpleActionExecuteEventArgs e)
+        // async void is the documented XAF Blazor shape for a long-running Execute handler
+        // (docs.devexpress.com/eXpressAppFramework/404738); the await resumes on Blazor's
+        // synchronization context, so ShowMessage below is safe. On success the process restarts.
+        private async void DeployAction_Execute(object sender, SimpleActionExecuteEventArgs e)
         {
-            _ = Task.Run(async () =>
+            string error;
+            try
             {
-                try
+                error = await Task.Run(SchemaChangeOrchestrator.Instance.ExecuteHotLoadAsync);
+            }
+            catch (Exception ex)
+            {
+                Tracing.Tracer.LogError($"Deploy schema failed: {ex.Message}");
+                error = ex.Message;
+            }
+
+            if (error != null && Application != null)
+            {
+                Application.ShowViewStrategy.ShowMessage(new MessageOptions
                 {
-                    await SchemaChangeOrchestrator.Instance.ExecuteHotLoadAsync();
-                }
-                catch (Exception ex)
-                {
-                    Tracing.Tracer.LogError($"Deploy schema failed: {ex.Message}");
-                }
-            });
+                    Message = error,
+                    Type = InformationType.Error,
+                    Duration = 15000,
+                });
+            }
         }
     }
 }

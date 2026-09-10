@@ -4,7 +4,7 @@ namespace XafDynamicAssemblies.Module.Validation
 {
     public static class CustomFieldValidation
     {
-        private static readonly Regex ValidIdentifierRegex = new(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.Compiled);
+        private static readonly Regex ValidIdentifierRegex = new(@"^[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.Compiled);
 
         private static readonly HashSet<string> ReservedFieldNames = new(StringComparer.OrdinalIgnoreCase)
         {

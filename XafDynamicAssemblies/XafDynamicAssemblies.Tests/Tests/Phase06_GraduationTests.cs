@@ -56,7 +56,6 @@ public class Phase06_GraduationTests : IAsyncLifetime
 
         var lv = new ListViewPage(_page);
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", className);
         await detail.FillFieldAsync("Navigation Group", navGroup);
@@ -131,7 +130,6 @@ public class Phase06_GraduationTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Title", "GradTestRecord1");
         await detail.ClickSaveAsync();
@@ -199,7 +197,10 @@ public class Phase06_GraduationTests : IAsyncLifetime
         // be rendered as a large text area)
         using var conn = DatabaseHelper.GetConnection();
         using var cmd = new NpgsqlCommand(
-            "SELECT \"GraduatedSource\", \"Status\" FROM \"CustomClasses\" WHERE \"ClassName\" = @name", conn);
+            // TEST-008: deferred deletion keeps soft-deleted GradTest rows from earlier runs (the
+            // unique index is filtered on GCRecord = 0), so read only the live row.
+            "SELECT \"GraduatedSource\", \"Status\" FROM \"CustomClasses\" WHERE \"ClassName\" = @name " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
         cmd.Parameters.AddWithValue("name", "GradTest");
         using var reader = cmd.ExecuteReader();
         Assert.True(reader.Read(), "GradTest should exist in DB");
@@ -213,6 +214,7 @@ public class Phase06_GraduationTests : IAsyncLifetime
         Assert.Contains("DbContext", source);
         Assert.Contains("migration", source.ToLowerInvariant());
         Assert.Equal("Compiled", status);
+        Assert.False(reader.Read(), "exactly one live GradTest row expected");
     }
 
     // --- TestGraduationRemovesFromRuntime: verify that after graduation + deploy, the entity is removed from runtime ---

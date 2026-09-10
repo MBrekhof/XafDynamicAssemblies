@@ -75,22 +75,29 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
     // --- TestDegradedMode: compilation errors cause graceful degraded mode ---
 
     /// <summary>
-    /// Insert a class with invalid TypeName, deploy, verify server starts in degraded mode.
-    /// The server should still boot with compiled entities working (CustomClass, CustomField).
+    /// Insert a class with invalid TypeName and deploy. DATA-003: the DDL sync rejects the type,
+    /// the deploy is aborted with an error toast and NO restart happens; the server keeps
+    /// serving compiled entities (CustomClass, CustomField). (Before DATA-003 the failure was
+    /// swallowed and the process restarted into degraded mode.)
     /// </summary>
     [Fact]
-    public async Task Test_01_InvalidTypenameDegradesGracefully()
+    public async Task Test_01_InvalidTypenameAbortsDeployWithMessage()
     {
-        // Create a class with an invalid type that will cause compilation failure
+        // Create a class with an invalid type that will fail DDL sync and compilation
         CreateClassViaDb("BadTypeClass", "ErrorTest", "Class with invalid field type");
         DatabaseHelper.InsertFieldViaDb("BadTypeClass", "BadField", "Totally.Invalid.Type.That.Does.Not.Exist");
 
-        // Deploy — this will trigger compilation which should fail for the invalid type
         await NavToCustomClassAsync();
         await ServerHelper.ClickDeploySchemaAsync(_page);
-        await ServerHelper.WaitForDeployRestartAsync(_page);
 
-        // Server should be up in degraded mode — compiled entities still work
+        // The Deploy action awaits the orchestrator and shows the DDL error as an XAF toast.
+        // Other toasts can be up at the same time (the graduation warning when a Compiled class
+        // exists in the shared DB), so wait for the one carrying the abort text.
+        var alertText = _page.Locator("[role='alert'] .xaf-alert-message:has-text('Deploy aborted')");
+        await alertText.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 30_000 });
+        Assert.Contains("BadTypeClass", await alertText.First.InnerTextAsync());
+
+        // Same process, still alive — compiled entities still work
         var nav = new NavigationPage(_page);
         await nav.NavigateToAsync("Schema Management", "Custom Class");
         var lv = new ListViewPage(_page);
@@ -154,7 +161,6 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
 
         // Create a record
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Valid Name", "RecoveryTest1");
         await detail.ClickSaveAsync();
@@ -166,6 +172,46 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
         await _page.WaitForTimeoutAsync(2000);
         await lv.WaitForGridAsync();
         Assert.True(await lv.HasRowWithTextAsync("RecoveryTest1"), "RecoveryTest1 should exist after recovery");
+    }
+
+    /// <summary>
+    /// DATA-007: flip a deployed field's TypeName via SQL (add-only DDL cannot follow), deploy.
+    /// The startup guard must drop that field from the compiled type so the ListView still
+    /// loads; a second, healthy field proves the class itself survived.
+    /// </summary>
+    [Fact]
+    public async Task Test_04b_TypeChangeGuardSkipsMismatchedField()
+    {
+        using (var conn = DatabaseHelper.GetConnection())
+        using (var cmd = new NpgsqlCommand(
+            @"UPDATE ""CustomFields"" SET ""TypeName"" = 'System.Int32' WHERE ""FieldName"" = 'ValidName'
+              AND ""CustomClassId"" IN (SELECT ""ID"" FROM ""CustomClasses"" WHERE ""ClassName"" = 'BadTypeClass'
+                  AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0))", conn))
+        {
+            Assert.Equal(1, cmd.ExecuteNonQuery());
+        }
+        DatabaseHelper.InsertFieldViaDb("BadTypeClass", "Note", "System.String");
+
+        await NavToCustomClassAsync();
+        await ServerHelper.ClickDeploySchemaAsync(_page);
+        await ServerHelper.WaitForDeployRestartAsync(_page);
+
+        await _page.GotoAsync($"{TestSettings.BaseUrl}/BadTypeClass_ListView",
+            new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
+        var lv = new ListViewPage(_page);
+        await lv.WaitForGridAsync();
+        await _page.WaitForTimeoutAsync(1000);
+        var headers = string.Join("|", await _page.Locator(".dxbl-grid th").AllInnerTextsAsync());
+        Assert.Contains("Note", headers);
+        Assert.DoesNotContain("Valid Name", headers);
+
+        // Restore the metadata so the remaining tests see the original shape
+        using (var conn = DatabaseHelper.GetConnection())
+        using (var cmd = new NpgsqlCommand(
+            @"UPDATE ""CustomFields"" SET ""TypeName"" = 'System.String' WHERE ""FieldName"" = 'ValidName'", conn))
+        {
+            cmd.ExecuteNonQuery();
+        }
     }
 
     // --- TestEmptyMetadataStartup: server behavior with no runtime metadata ---
@@ -228,7 +274,6 @@ public class Phase07_ErrorHandlingTests : IAsyncLifetime
         var (nav, lv) = await NavToCustomClassAsync();
         await DeleteIfExistsAsync("RestartTest");
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Class Name", "RestartTest");
         await detail.FillFieldAsync("Navigation Group", "RecoveryGroup");

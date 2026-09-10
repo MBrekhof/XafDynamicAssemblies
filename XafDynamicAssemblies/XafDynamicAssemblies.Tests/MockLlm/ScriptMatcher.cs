@@ -87,7 +87,7 @@ public class ScriptMatcher
         if (lower.Contains("list") && lower.Contains("entit")) return ToolUse("list_entities", EmptyInput());
         if (lower.Contains("list") && lower.Contains("role")) return ToolUse("list_roles", EmptyInput());
         if ((lower.Contains("describe") || lower.Contains("show")) && lower.Contains("field"))
-            return ToolUse("describe_entity", new Dictionary<string, object> { ["class_name"] = ExtractEntityName(userMessage) });
+            return ToolUse("describe_entity", new Dictionary<string, object> { ["entityName"] = ExtractEntityName(userMessage) });
         if (lower.Contains("pending") || lower.Contains("changes")) return ToolUse("get_pending_changes", EmptyInput());
         if (lower.Contains("add") && lower.Contains("field")) return BuildAddField(userMessage);
         if (lower.Contains("delete") || lower.Contains("remove")) return BuildDelete(userMessage);

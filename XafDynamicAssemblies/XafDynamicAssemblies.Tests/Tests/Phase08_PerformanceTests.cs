@@ -135,7 +135,6 @@ public class Phase08_PerformanceTests : IAsyncLifetime
         await lv.WaitForGridAsync();
 
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "PerfRecord1");
         await detail.ClickSaveAsync();
@@ -148,24 +147,30 @@ public class Phase08_PerformanceTests : IAsyncLifetime
         Assert.True(await lv.HasRowWithTextAsync("PerfRecord1"), "PerfRecord1 should exist");
     }
 
-    // ponytail: Python's TestConcurrentPageLoads never opens a second context either — ported as-is, not "fixed".
-
-    /// <summary>Open a runtime entity ListView and verify it renders without errors.</summary>
+    /// <summary>
+    /// TEST-012: three independent browser contexts (= three Blazor circuits, each running module
+    /// Setup) open different runtime ListViews at the same time. Exercises the per-circuit
+    /// bootstrap path (PERF-001) and the EF model cache under concurrent first requests.
+    /// </summary>
     [Fact]
     public async Task Test_03_ConcurrentPageAccess()
     {
-        await ServerHelper.ReloadAndWaitAsync(_page);
+        var pages = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => _fixture.NewPageAsync()));
+        try
+        {
+            await Task.WhenAll(pages.Select((p, i) => p.GotoAsync($"{TestSettings.BaseUrl}/PerfTest0{i}_ListView",
+                new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 })));
 
-        // Open PerfTest00 in this page
-        await _page.GotoAsync($"{TestSettings.BaseUrl}/PerfTest00_ListView",
-            new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = 60_000 });
-        await _page.WaitForTimeoutAsync(3000);
-        var lv = new ListViewPage(_page);
-        await lv.WaitForGridAsync();
-
-        // The grid should render without errors
-        var grids = _page.Locator(".dxbl-grid");
-        Assert.True(await grids.First.IsVisibleAsync() || await grids.Last.IsVisibleAsync());
+            foreach (var p in pages)
+            {
+                await new ListViewPage(p).WaitForGridAsync();
+                Assert.True(await p.Locator(".dxbl-grid").First.IsVisibleAsync(), "each circuit should render its runtime ListView grid");
+            }
+        }
+        finally
+        {
+            foreach (var p in pages) await p.Context.DisposeAsync();
+        }
     }
 
     // --- TestCleanup ---

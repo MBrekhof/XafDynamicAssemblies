@@ -16,6 +16,13 @@ public static class DatabaseHelper
 {
     public static NpgsqlConnection GetConnection()
     {
+        // TEST-003: the suite runs DELETE/DROP TABLE against this database by design (E2E shares
+        // the app's DB). Refuse anything that is not the local docker throwaway.
+        var host = TestSettings.DbHost;
+        if (!(host is "localhost" or "127.0.0.1" or "::1") || TestSettings.DbName != "XafDynamicAssemblies")
+            throw new InvalidOperationException(
+                $"Refusing destructive test SQL against {host}/{TestSettings.DbName}: the suite only runs against the local docker database (localhost / XafDynamicAssemblies).");
+
         var connStr = $"Host={TestSettings.DbHost};Port={TestSettings.DbPort};" +
                       $"Database={TestSettings.DbName};Username={TestSettings.DbUser};" +
                       $"Password={TestSettings.DbPassword}";
@@ -83,6 +90,34 @@ public static class DatabaseHelper
         insertCmd.Parameters.AddWithValue("toolTip", (object?)toolTip ?? DBNull.Value);
         insertCmd.Parameters.AddWithValue("displayName", (object?)displayName ?? DBNull.Value);
         insertCmd.ExecuteNonQuery();
+    }
+
+    /// <summary>True when a live (not soft-deleted) CustomClass row with this name exists.</summary>
+    public static bool ClassExists(string className)
+    {
+        using var conn = GetConnection();
+        using var cmd = new NpgsqlCommand(
+            "SELECT EXISTS (SELECT 1 FROM \"CustomClasses\" WHERE \"ClassName\" = @name " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0))", conn);
+        cmd.Parameters.AddWithValue("name", className);
+        return (bool)cmd.ExecuteScalar()!;
+    }
+
+    /// <summary>
+    /// TEST-004: insert a Runtime CustomClass row directly (no fields), bypassing the UI.
+    /// Lets a phase establish its own prerequisites instead of relying on class execution order.
+    /// </summary>
+    public static void InsertClassViaDb(string className, string navGroup, string description = "")
+    {
+        using var conn = GetConnection();
+        using var cmd = new NpgsqlCommand(@"
+            INSERT INTO ""CustomClasses"" (""ID"", ""ClassName"", ""NavigationGroup"", ""Description"",
+                ""Status"", ""GCRecord"", ""OptimisticLockField"")
+            VALUES (gen_random_uuid(), @name, @navGroup, @description, 'Runtime', 0, 0)", conn);
+        cmd.Parameters.AddWithValue("name", className);
+        cmd.Parameters.AddWithValue("navGroup", navGroup);
+        cmd.Parameters.AddWithValue("description", description);
+        cmd.ExecuteNonQuery();
     }
 
     /// <summary>

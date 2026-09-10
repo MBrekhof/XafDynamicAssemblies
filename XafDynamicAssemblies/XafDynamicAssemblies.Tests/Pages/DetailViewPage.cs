@@ -64,28 +64,22 @@ public class DetailViewPage : BasePage
     }
 
     /// <summary>Find the .dxbl-fl-ctrl container for a field by its data-item-name.</summary>
+    // TEST-007: one auto-waiting locator instead of CountAsync probes. Blazor Server renders a
+    // DetailView over the SignalR websocket, so NetworkIdle is already true after New/Save and a
+    // one-shot probe inspected the previous view (or a same-named field on it).
     private async Task<ILocator> FindContainerByLabelAsync(string label)
     {
-        var container = Page.Locator($".dxbl-fl-ctrl:has([data-item-name='{label}'])");
-        if (await container.CountAsync() > 0)
-            return container.First;
-        throw new InvalidOperationException($"Could not find form container with label: {label}");
+        var container = Page.Locator($".dxbl-fl-ctrl:has([data-item-name='{label}'])").First;
+        await container.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+        return container;
     }
 
-    /// <summary>Find an input element by its XAF form layout data-item-name.</summary>
+    /// <summary>Find an input element (input or textarea) by its XAF form layout data-item-name.</summary>
     private async Task<ILocator> FindInputByLabelAsync(string label)
     {
-        // Primary: find by data-item-name attribute within form layout control
         var field = Page.Locator(
-            $".dxbl-fl-ctrl:has([data-item-name='{label}']) input:not([type='hidden']):not([type='checkbox'])");
-        if (await field.CountAsync() > 0)
-            return field.First;
-
-        // Also try textarea
-        field = Page.Locator($".dxbl-fl-ctrl:has([data-item-name='{label}']) textarea");
-        if (await field.CountAsync() > 0)
-            return field.First;
-
-        throw new InvalidOperationException($"Could not find input field with label: {label}");
+            $".dxbl-fl-ctrl:has([data-item-name='{label}']) :is(input:not([type='hidden']):not([type='checkbox']), textarea)").First;
+        await field.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+        return field;
     }
 }

@@ -23,7 +23,7 @@ namespace XafDynamicAssemblies.Module.Services
 
             var package = new SchemaPackageDto
             {
-                Version = "1.0",
+                Version = "1.1", // 1.1: fields with IsDefaultField are included (DATA-005)
                 ExportedAt = DateTime.UtcNow,
                 Classes = classes.Select(c => new CustomClassDto
                 {
@@ -32,7 +32,6 @@ namespace XafDynamicAssemblies.Module.Services
                     Description = c.Description,
                     IsApiExposed = c.IsApiExposed,
                     Fields = c.Fields
-                        .Where(f => !f.IsDefaultField)
                         .OrderBy(f => f.SortOrder)
                         .ThenBy(f => f.FieldName)
                         .Select(f => new CustomFieldDto
@@ -40,6 +39,7 @@ namespace XafDynamicAssemblies.Module.Services
                             FieldName = f.FieldName,
                             TypeName = f.TypeName,
                             IsRequired = f.IsRequired,
+                            IsDefaultField = f.IsDefaultField,
                             Description = f.Description,
                             ReferencedClassName = f.ReferencedClassName,
                             SortOrder = f.SortOrder,
@@ -72,6 +72,9 @@ namespace XafDynamicAssemblies.Module.Services
             if (package?.Classes is not { Count: > 0 })
                 return new SchemaImportResult(false, "No classes found in the schema package.");
 
+            // A 1.0 export deliberately omitted the default field, so its absence there is not a
+            // removal request; only 1.1+ packages are complete enough to drive deletions.
+            var legacyExport = package.Version == "1.0";
             int created = 0, updated = 0;
             var changes = new List<string>();
 
@@ -82,7 +85,7 @@ namespace XafDynamicAssemblies.Module.Services
 
                 if (existing is not null)
                 {
-                    var classChanges = UpdateClass(objectSpace, existing, dto);
+                    var classChanges = UpdateClass(objectSpace, existing, dto, legacyExport);
                     if (classChanges.Count > 0)
                         changes.Add($"Updated '{dto.ClassName}': {string.Join(", ", classChanges)}");
                     updated++;
@@ -118,7 +121,7 @@ namespace XafDynamicAssemblies.Module.Services
             }
         }
 
-        private static List<string> UpdateClass(IObjectSpace objectSpace, CustomClass existing, CustomClassDto dto)
+        private static List<string> UpdateClass(IObjectSpace objectSpace, CustomClass existing, CustomClassDto dto, bool legacyExport)
         {
             var changes = new List<string>();
 
@@ -141,7 +144,7 @@ namespace XafDynamicAssemblies.Module.Services
             var importFieldNames = dto.Fields.Select(f => f.FieldName).ToHashSet();
 
             var fieldsToRemove = existing.Fields
-                .Where(f => !f.IsDefaultField && !importFieldNames.Contains(f.FieldName))
+                .Where(f => !importFieldNames.Contains(f.FieldName) && !(legacyExport && f.IsDefaultField))
                 .ToList();
             foreach (var field in fieldsToRemove)
             {
@@ -180,6 +183,7 @@ namespace XafDynamicAssemblies.Module.Services
         {
             field.TypeName = dto.TypeName ?? "System.String";
             field.IsRequired = dto.IsRequired;
+            field.IsDefaultField = dto.IsDefaultField;
             field.Description = dto.Description;
             field.ReferencedClassName = dto.ReferencedClassName;
             field.SortOrder = dto.SortOrder;
@@ -200,6 +204,8 @@ namespace XafDynamicAssemblies.Module.Services
                 changes.Add($"TypeName: '{field.TypeName}' -> '{dto.TypeName}'");
             if (field.IsRequired != dto.IsRequired)
                 changes.Add($"IsRequired: {field.IsRequired} -> {dto.IsRequired}");
+            if (field.IsDefaultField != dto.IsDefaultField)
+                changes.Add($"IsDefaultField: {field.IsDefaultField} -> {dto.IsDefaultField}");
             if (field.ReferencedClassName != dto.ReferencedClassName)
                 changes.Add("ReferencedClassName changed");
             if (field.SortOrder != dto.SortOrder)
@@ -237,6 +243,8 @@ namespace XafDynamicAssemblies.Module.Services
         public string FieldName { get; init; }
         public string TypeName { get; init; }
         public bool IsRequired { get; init; }
+        /// <summary>The display property ([DefaultProperty]); DATA-005: it used to be dropped from the export entirely.</summary>
+        public bool IsDefaultField { get; init; }
         public string Description { get; init; }
         public string ReferencedClassName { get; init; }
         public int SortOrder { get; init; }

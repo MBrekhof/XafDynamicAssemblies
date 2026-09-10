@@ -1,5 +1,7 @@
 using System.Text;
+using Microsoft.CodeAnalysis.CSharp;
 using XafDynamicAssemblies.Module.BusinessObjects;
+using XafDynamicAssemblies.Module.Validation;
 
 namespace XafDynamicAssemblies.Module.Services
 {
@@ -14,6 +16,11 @@ namespace XafDynamicAssemblies.Module.Services
         /// </summary>
         public static string GenerateGraduationSource(CustomClass cc)
         {
+            // SEC-003: same identifier/type guard as the runtime generator; the export is C# source.
+            var invalid = MetadataValidator.Validate(cc);
+            if (invalid != null)
+                throw new InvalidOperationException($"{cc.ClassName}: {invalid}");
+
             var sb = new StringBuilder();
 
             sb.AppendLine("// ============================================================");
@@ -83,7 +90,7 @@ namespace XafDynamicAssemblies.Module.Services
             {
                 sb.AppendLine("[DefaultClassOptions]");
                 if (!string.IsNullOrWhiteSpace(cc.NavigationGroup))
-                    sb.AppendLine($"[NavigationItem(\"{EscapeString(cc.NavigationGroup)}\")]");
+                    sb.AppendLine($"[NavigationItem({Literal(cc.NavigationGroup)})]");
 
                 var defaultField = cc.Fields.FirstOrDefault(f => f.IsDefaultField)
                     ?? cc.Fields.FirstOrDefault(f => f.TypeName == "System.String");
@@ -127,7 +134,7 @@ namespace XafDynamicAssemblies.Module.Services
                         sb.AppendLine($"    [System.ComponentModel.DataAnnotations.Required]");
 
                     if (field.TypeName == "System.String" && field.StringMaxLength.HasValue)
-                        sb.AppendLine($"    [DevExpress.Persistent.Base.Size({field.StringMaxLength.Value})]");
+                        sb.AppendLine($"    [DevExpress.ExpressApp.DC.FieldSize({field.StringMaxLength.Value})]");
 
                     sb.AppendLine($"    public virtual {clrType}{nullable} {field.FieldName} {{ get; set; }}");
                 }
@@ -147,11 +154,11 @@ namespace XafDynamicAssemblies.Module.Services
             if (!field.IsVisibleInDetailView)
                 sb.AppendLine("    [VisibleInDetailView(false)]");
             if (!field.IsEditable)
-                sb.AppendLine("    [Editable(false)]");
+                sb.AppendLine("    [DevExpress.ExpressApp.Model.ModelDefault(\"AllowEdit\", \"False\")]");
             if (!string.IsNullOrWhiteSpace(field.ToolTip))
-                sb.AppendLine($"    [ToolTip(\"{EscapeString(field.ToolTip)}\")]");
+                sb.AppendLine($"    [ToolTip({Literal(field.ToolTip)})]");
             if (!string.IsNullOrWhiteSpace(field.DisplayName))
-                sb.AppendLine($"    [DisplayName(\"{EscapeString(field.DisplayName)}\")]");
+                sb.AppendLine($"    [DisplayName({Literal(field.DisplayName)})]");
         }
 
         private static bool IsReferenceField(CustomField field)
@@ -174,7 +181,7 @@ namespace XafDynamicAssemblies.Module.Services
                 "System.DateTime" => "DateTime",
                 "System.Guid" => "Guid",
                 "System.Byte[]" => "byte[]",
-                _ => typeName
+                _ => throw new InvalidOperationException($"Unsupported type '{typeName}'")
             };
         }
 
@@ -185,14 +192,13 @@ namespace XafDynamicAssemblies.Module.Services
                 or "System.DateTime" or "System.Guid";
         }
 
-        private static string EscapeString(string s)
-        {
-            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-        }
+        private static string Literal(string s) => SymbolDisplay.FormatLiteral(s, quote: true);
 
+        /// <summary>Single-line XML comment text: a line break in a description must not end the comment.</summary>
         private static string EscapeXmlComment(string s)
         {
-            return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+            var oneLine = string.Join(" ", s.Split(new[] { "\r\n", "\r", "\n", "\u2028", "\u2029" }, StringSplitOptions.None));
+            return oneLine.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
         }
     }
 }

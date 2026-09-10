@@ -66,6 +66,9 @@ public class AIChatPanel : BasePage
         await Page.WaitForTimeoutAsync(500);
     }
 
+    /// <summary>Assistant-message count captured by ClickSuggestionAsync just before submit; pass to WaitForResponseAsync.</summary>
+    public int LastSentAssistantCount { get; private set; }
+
     /// <summary>Type a message in the chat input and send it, then wait for the response.</summary>
     public async Task SendMessageAsync(string text, int timeout = 30_000)
     {
@@ -74,14 +77,18 @@ public class AIChatPanel : BasePage
         await input.ClickAsync();
         await input.FillAsync(text);
         await Page.WaitForTimeoutAsync(200);
+        var before = await Page.Locator(AssistantMessages).CountAsync();
         await input.PressAsync("Enter");
 
-        await Page.WaitForTimeoutAsync(500);
-        await WaitForResponseAsync(timeout);
+        await WaitForResponseAsync(timeout, before);
     }
 
-    /// <summary>Wait for the AI to finish responding: the last assistant message has text.</summary>
-    public async Task WaitForResponseAsync(int timeout = 30_000)
+    /// <summary>
+    /// Wait for the AI to finish responding: a NEW assistant message (index >= <paramref name="before"/>,
+    /// the count captured before sending) exists and has text. TEST-006: without the count, the
+    /// previous turn's bubble satisfied the predicate on multi-turn tests.
+    /// </summary>
+    public async Task WaitForResponseAsync(int timeout = 30_000, int before = 0)
     {
         // An assistant bubble can be visible before any text exists: DxAIChat renders a
         // tool_use turn as an empty assistant message while the server-side tool executes
@@ -89,9 +96,9 @@ public class AIChatPanel : BasePage
         // behaves the same on cold-start latency. Waiting for bubble visibility alone made
         // GetLastResponseAsync race the content (Test_02/Test_10 read "").
         await Page.WaitForFunctionAsync(
-            "sel => { const m = document.querySelectorAll(sel); " +
-            "return m.length > 0 && m[m.length - 1].innerText.trim().length > 0; }",
-            AssistantMessages,
+            "args => { const m = document.querySelectorAll(args.sel); " +
+            "return m.length > args.before && m[m.length - 1].innerText.trim().length > 0; }",
+            new { sel = AssistantMessages, before },
             new() { Timeout = timeout });
 
         await Page.WaitForTimeoutAsync(500);
@@ -149,6 +156,7 @@ public class AIChatPanel : BasePage
                 // Clicking a suggestion only populates the message input (verified against
                 // the live DxAIChat DOM) — it does not auto-submit. Submit explicitly, same
                 // mechanism as SendMessageAsync.
+                LastSentAssistantCount = await Page.Locator(AssistantMessages).CountAsync();
                 await Page.Locator(MessageInput).First.PressAsync("Enter");
                 return;
             }

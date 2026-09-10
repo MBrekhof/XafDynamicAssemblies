@@ -9,12 +9,10 @@ namespace XafDynamicAssemblies.Tests.Tests;
 /// Ported from tests/tests/test_phase11_ai_chat_live.py.
 ///
 /// These tests make real calls to the configured LLM provider and are gated on
-/// <see cref="TestSettings.AiTestApiKey"/> (the AI_TEST_API_KEY env var). Each test
-/// returns immediately (pass-by-skip) when the key is unset, mirroring Python's
-/// module-level `pytest.skip(..., allow_module_level=True)` — xUnit 2.x has no
-/// built-in Skip.If and this suite deliberately does not add the Xunit.SkippableFact
-/// package for a single skip check (Task 19 binding decision). `[Trait("Category",
-/// "LiveAI")]` lets callers exclude these via `--filter "Category!=LiveAI"`.
+/// <see cref="TestSettings.AiTestApiKey"/> (the AI_TEST_API_KEY env var). TEST-013: each
+/// test is a [SkippableFact] and reports Skipped (not Passed) when the key is unset, so an
+/// unfiltered run no longer shows misleading green. `[Trait("Category", "LiveAI")]` lets
+/// callers exclude these via `--filter "Category!=LiveAI"`.
 ///
 /// All AI calls use a 60-second timeout since real responses can be slow. Entity
 /// names include a random suffix to avoid conflicts between test runs.
@@ -23,16 +21,11 @@ namespace XafDynamicAssemblies.Tests.Tests;
 public class Phase11_AIChatLiveTests : IAsyncLifetime
 {
     private readonly BrowserFixture _fixture;
-    private readonly ITestOutputHelper _output;
     private IPage? _page;
 
     private const int AiTimeout = 60_000;
 
-    public Phase11_AIChatLiveTests(BrowserFixture fixture, ITestOutputHelper output)
-    {
-        _fixture = fixture;
-        _output = output;
-    }
+    public Phase11_AIChatLiveTests(BrowserFixture fixture) => _fixture = fixture;
 
     public async Task InitializeAsync()
     {
@@ -47,13 +40,8 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
         if (_page != null) await _page.Context.DisposeAsync();
     }
 
-    /// <summary>Logs and returns true when no live AI key is configured; caller should return immediately.</summary>
-    private bool SkipIfNoApiKey()
-    {
-        if (TestSettings.AiTestApiKey != null) return false;
-        _output.WriteLine("SKIPPED: AI_TEST_API_KEY not set — live AI tests require a real API key.");
-        return true;
-    }
+    private static void SkipIfNoApiKey() =>
+        Skip.If(TestSettings.AiTestApiKey == null, "AI_TEST_API_KEY not set — live AI tests require a real API key.");
 
     private static string UniqueName(string prefix = "AITest") =>
         prefix + Guid.NewGuid().ToString("N")[..6];
@@ -98,11 +86,11 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
     // --- TestLiveEntityCreation ---
 
     /// <summary>Ask the AI to create an entity, confirm the action, and verify it appears in the CustomClass list view.</summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveAI")]
     public async Task Test_01_CreateEntityNaturalLanguage()
     {
-        if (SkipIfNoApiKey()) return;
+        SkipIfNoApiKey();
 
         var entityName = UniqueName("AICreate");
         var chat = new AIChatPanel(_page!);
@@ -141,11 +129,11 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
     // --- TestLiveEntityModification ---
 
     /// <summary>Create an entity first, then ask the AI to add a field to it.</summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveAI")]
     public async Task Test_02_AddFieldViaChat()
     {
-        if (SkipIfNoApiKey()) return;
+        SkipIfNoApiKey();
 
         var entityName = UniqueName("AIModify");
         var chat = new AIChatPanel(_page!);
@@ -180,11 +168,11 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
     // --- TestLiveAmbiguityResolution ---
 
     /// <summary>Send a vague request and verify the AI asks for clarification rather than guessing.</summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveAI")]
     public async Task Test_03_VagueRequest()
     {
-        if (SkipIfNoApiKey()) return;
+        SkipIfNoApiKey();
 
         var chat = new AIChatPanel(_page!);
         await chat.NavigateToChatAsync();
@@ -212,11 +200,11 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
     // --- TestLiveRolePermissions ---
 
     /// <summary>Ask the AI about roles/permissions and verify it gives a meaningful answer.</summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveAI")]
     public async Task Test_04_AskAboutPermissions()
     {
-        if (SkipIfNoApiKey()) return;
+        SkipIfNoApiKey();
 
         var chat = new AIChatPanel(_page!);
         await chat.NavigateToChatAsync();
@@ -241,11 +229,11 @@ public class Phase11_AIChatLiveTests : IAsyncLifetime
     /// Full workflow: create entity, confirm, add field, confirm.
     /// Verify the conversation has at least 6 messages (3 user + 3 assistant).
     /// </summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "LiveAI")]
     public async Task Test_05_CreateThenModify()
     {
-        if (SkipIfNoApiKey()) return;
+        SkipIfNoApiKey();
 
         var entityName = UniqueName("AIMulti");
         var chat = new AIChatPanel(_page!);

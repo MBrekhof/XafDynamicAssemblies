@@ -123,7 +123,7 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         {
             var firstText = await suggestions.First.InnerTextAsync();
             await chat.ClickSuggestionAsync(firstText);
-            await chat.WaitForResponseAsync(30_000);
+            await chat.WaitForResponseAsync(30_000, chat.LastSentAssistantCount);
             var response = await chat.GetLastResponseAsync();
             Assert.True(response.Length > 0, "Clicking a suggestion should produce a response");
         }
@@ -505,19 +505,29 @@ public class Phase11_AIChatMockedTests : IAsyncLifetime, IClassFixture<MockLlmFi
         }, active => active == false);
         Assert.False(isActive, "Action should be inactive after 'disable' via chat");
 
+        // TEST-009: capture the action's ID before the delete so the step assertion is scoped to
+        // this action, not to every CustomActionSteps row in the shared dev DB.
+        Guid actionId;
+        using (var conn = DatabaseHelper.GetConnection())
+        using (var cmd = new NpgsqlCommand(
+            "SELECT \"ID\" FROM \"CustomActions\" WHERE \"Caption\" = 'Approve' AND \"TargetEntity\" = 'SchemaHistory' " +
+            "AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn))
+        {
+            actionId = (Guid)cmd.ExecuteScalar()!;
+        }
+
         await chat.SendMessageAsync("delete the 'Approve' action on 'SchemaHistory'", 30_000);
         var actionCount = await PollUntilAsync(() => CountActionsInDb("Approve", "SchemaHistory"), c => c == 0L);
         Assert.Equal(0L, actionCount);
 
-        // Steps are aggregated — deleting the action soft-deletes its steps too (GCRecord).
-        // Phase 12 leaves its own already-deleted CustomActionSteps rows lying around
-        // (physical rows never purged), so the LIVE count (GCRecord filter) is the exact
-        // zero here, not a raw table COUNT(*).
+        // Steps are aggregated — deleting the action soft-deletes its steps too (GCRecord),
+        // so the LIVE step count for this action must reach zero.
         var stepCount = await PollUntilAsync(() =>
         {
             using var conn = DatabaseHelper.GetConnection();
             using var cmd = new NpgsqlCommand(
-                "SELECT COUNT(*) FROM \"CustomActionSteps\" WHERE \"GCRecord\" IS NULL OR \"GCRecord\" = 0", conn);
+                "SELECT COUNT(*) FROM \"CustomActionSteps\" WHERE \"CustomActionId\" = @id AND (\"GCRecord\" IS NULL OR \"GCRecord\" = 0)", conn);
+            cmd.Parameters.AddWithValue("id", actionId);
             return (long)cmd.ExecuteScalar()!;
         }, c => c == 0L);
         Assert.Equal(0L, stepCount);

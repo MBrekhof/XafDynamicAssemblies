@@ -47,6 +47,23 @@ public class Phase04_HotLoadTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// TEST-004: Test_05 needs the Customer runtime entity that Phase02 creates, but xUnit 2 gives
+    /// no class ordering guarantee (it held by file-name coincidence). Establish the prerequisite
+    /// here; Test_01's Deploy then compiles it together with HotLoadProduct.
+    /// </summary>
+    [Fact]
+    public async Task Test_00_EnsureCustomerExists()
+    {
+        if (!DatabaseHelper.ClassExists("Customer"))
+        {
+            DatabaseHelper.InsertClassViaDb("Customer", "CRM", "Customer entity (Phase04 prerequisite)");
+            DatabaseHelper.InsertFieldViaDb("Customer", "Name", "System.String", isDefault: true);
+        }
+        Assert.True(DatabaseHelper.ClassExists("Customer"));
+        await Task.CompletedTask;
+    }
+
     // --- TestHotLoadNewClass: create a new class via UI and deploy it ---
 
     /// <summary>Create a new CustomClass and click Deploy Schema.</summary>
@@ -133,58 +150,28 @@ public class Phase04_HotLoadTests : IAsyncLifetime
         await lv.DoubleClickRowWithTextAsync("HotLoadProduct");
         await _page.WaitForTimeoutAsync(2000);
 
-        // In XAF Blazor, the aggregated Fields collection renders as a nested grid
-        // with its own toolbar. Look for the "New" button in the nested area.
-        // DevExpress Blazor 26.1: real action buttons are direct children of
-        // <dxbl-toolbar-item>/<dxbl-bar-item>; the adaptive-layout "virtual toolbar" clone wraps
-        // its (off-screen, non-interactive) copy in a plain <div> instead, so this selector
-        // excludes it. See BasePage.cs remarks.
-        var newButtons = _page.Locator(
-            "dxbl-toolbar-item > button[data-action-name=\"New\"], dxbl-bar-item > button[data-action-name=\"New\"]");
+        // TEST-010: this used to be a test that could not fail (swallowed try/catch, Assert.True(true)
+        // on both branches). DX 26.1 DOM, verified live: the DetailView ribbon renders its actions as
+        // <dxbl-bar-item> and has no New; the nested Fields ListView renders its own toolbar as
+        // <dxbl-toolbar-item>, so that is the one New on the page (the adaptive-layout clone sits
+        // under a plain <div> and is excluded by the direct-child combinator).
+        var nestedNew = _page.Locator("dxbl-toolbar-item > button[data-action-name=\"New\"]");
+        await nestedNew.First.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10_000 });
+        await nestedNew.First.ClickAsync();
 
-        if (await newButtons.CountAsync() > 1)
-        {
-            // Multiple New buttons -> last one is for the nested grid
-            await newButtons.Last.ClickAsync();
-            await _page.WaitForTimeoutAsync(2000);
+        var detail = new DetailViewPage(_page);
+        await detail.FillFieldAsync("Field Name", "ProductName");
+        await detail.ClickSaveAsync();
+        await _page.WaitForTimeoutAsync(2000);
 
-            // Fill in the new CustomField form
-            var detail = new DetailViewPage(_page);
-            try
-            {
-                await detail.FillFieldAsync("Field Name", "ProductName");
-                await detail.ClickSaveAsync();
-                await _page.WaitForTimeoutAsync(2000);
-
-                // Go back to parent CustomClass if we navigated away
-                if (await _page.Locator(".xaf-nav-link:has-text('Custom Class')").CountAsync() > 0)
-                {
-                    await _page.GoBackAsync();
-                    await _page.WaitForTimeoutAsync(1000);
-                }
-            }
-            catch
-            {
-                // ponytail: matches Python's bare `except Exception as e: print(...)` —
-                // nested grid interaction is best-effort here.
-            }
-        }
-
-        // Verify the field was added by checking CustomField list
+        // Verify the field was added by checking the CustomField list (DB-backed, not the nested grid)
         nav = new NavigationPage(_page);
         await nav.NavigateToAsync("Schema Management", "Custom Field");
         lv = new ListViewPage(_page);
         await lv.WaitForGridAsync();
         await _page.WaitForTimeoutAsync(500);
 
-        var hasField = await lv.HasRowWithTextAsync("ProductName");
-        // ponytail: matches Python's soft assertion — both branches assert True.
-        // Nested field creation via the aggregated grid is optional; core hot-load
-        // behavior is already validated by tests 01-03.
-        if (hasField)
-            Assert.True(true, "ProductName field was successfully added");
-        else
-            Assert.True(true, "Nested field creation is optional; core hot-load validated in tests 01-03");
+        Assert.True(await lv.HasRowWithTextAsync("ProductName"), "ProductName field should appear in the Custom Field list");
     }
 
     // --- TestDataSurvivesHotLoad: existing runtime entity data survives schema changes ---
@@ -213,7 +200,6 @@ public class Phase04_HotLoadTests : IAsyncLifetime
 
         // Create a test record
         await lv.ClickNewAsync();
-        await _page.WaitForTimeoutAsync(2000);
         var detail = new DetailViewPage(_page);
         await detail.FillFieldAsync("Name", "HotLoadSurvivor");
         await detail.ClickSaveAsync();

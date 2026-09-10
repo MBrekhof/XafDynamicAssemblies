@@ -255,15 +255,13 @@ When the server starts, `XafDynamicAssembliesModule.Setup()` calls `BootstrapRun
 User clicks "Deploy Schema" (SchemaChangeController)
     │
     ▼
-SchemaChangeOrchestrator.ExecuteHotLoadAsync()
+SchemaChangeOrchestrator.ExecuteHotLoadAsync()   — returns null or an error string
     │
-    ├── QueryMetadata()        — fresh metadata from DB
-    ├── SchemaSynchronizer()   — DDL sync
-    ├── LoadNewAssembly()      — Roslyn compile
-    ├── RuntimeEntityTypes =   — update DbContext (model invalidated)
-    ├── RegisterTypesInTypesInfo() — inform XAF
-    ├── RefreshRuntimeTypes()  — update AdditionalExportedTypes
-    ├── RestartNeeded = true   — always true after compilation
+    ├── QueryMetadata()        — fresh metadata from DB (SchemaGuard drops mismatched fields, DATA-007)
+    ├── SchemaSynchronizer()   — DDL sync; ANY failure aborts the deploy here (DATA-003)
+    ├── ValidateCompilation()  — Roslyn compile as validation only; nothing is loaded into
+    │                            this process (HOT-001); a failure aborts the deploy here
+    ├── RestartNeeded = true   — always true after a successful compilation
     └── SchemaChanged event    — fires with version number
            │
            ▼
@@ -273,7 +271,16 @@ SchemaChangeOrchestrator.ExecuteHotLoadAsync()
             await Task.Delay(3000);
             Environment.Exit(42);   // Force-exit
         });
+
+SchemaChangeController awaits the call (documented XAF Blazor `async void` Execute shape)
+and shows a returned error as an XAF error toast: "Deploy aborted, schema synchronization
+failed: ..." / "Deploy aborted, compilation failed: ...". An aborted deploy does NOT restart:
+the running process still has the previous, working type set, and a restart would only
+boot into a model whose columns the table lacks (or into degraded mode).
 ```
+
+The test suite observes the restart through `GET /_instance`, a per-process GUID served by
+Startup (TEST-005): `ServerHelper.WaitForDeployRestartAsync` polls until the value changes.
 
 ### Why Environment.Exit(42)?
 
@@ -664,12 +671,30 @@ In degraded mode:
 - Runtime entity views are unavailable
 - The admin can fix the bad metadata and redeploy
 
-### Error Isolation
+Degraded mode is reachable only at process start (a bad row that got into the database by a
+path other than the UI/AI tools, e.g. direct SQL, then a restart). A Deploy never restarts
+into it any more: DDL or compilation failures abort the deploy and show the error as a toast
+(DATA-003, HOT-001), and the AI tools validate before committing (AI-001).
+
+### Where metadata is validated
+
+`Module/Validation/MetadataValidator.cs` is the single guard every path converges on
+(SEC-003 / AI-001): identifier, C# keyword, reserved name, supported type, reference target,
+duplicate / FK-companion (`XId`) / class-name collisions, PostgreSQL identifier length
+(DATA-006). `RuntimeAssemblyBuilder.ValidateCompilation` and `Compile` run it before any source
+is generated and report failures as `Errors` (not exceptions: `EarlyBootstrap` has no guard);
+`GenerateSource` and graduation throw as a backstop. The XAF `RuleFromBoolProperty` rules on
+`CustomClass`/`CustomField` are the UI mirror of the same predicates; they do not fire on the AI
+tools' non-secured ObjectSpace, which is why the tools call the validator themselves. String
+metadata (NavigationGroup, DisplayName, ToolTip) is emitted via `SymbolDisplay.FormatLiteral`.
+
+### Error Isolation at startup
 
 DDL and compilation have separate try/catch blocks:
 
 ```csharp
-// DDL failure is non-fatal
+// DDL failure is non-fatal at startup (SynchronizeAll isolates each class and reports
+// all failures in one exception)
 try { schemaSyncer.SynchronizeAll(classes); }
 catch (Exception ddlEx) { /* log and continue */ }
 
@@ -682,6 +707,17 @@ if (!result.Success)
     return;
 }
 ```
+
+### SchemaGuard (DATA-007)
+
+`SchemaSynchronizer` and the XAF updater are add-only (DATA-002), so a `TypeName` change or a
+Reference retarget on a deployed field leaves the SQL column as it was. `SchemaGuard.Sanitize`
+runs inside `QueryMetadata`, compares each field with `information_schema.columns` and the
+single-column FKs in `pg_constraint`, and drops a field whose column cannot materialize the
+metadata type (in memory only; class and database untouched). Reasons are logged as
+`[SchemaGuard]` and appended to the `validate_schema` tool output. Unknown types on either side
+pass; an FK retarget is judged only for runtime targets; a reference without an FK is a mismatch
+only when it holds dangling ids.
 
 ### Recovery
 

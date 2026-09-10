@@ -7,6 +7,7 @@ using DevExpress.Persistent.Base;
 using Npgsql;
 using XafDynamicAssemblies.Module.BusinessObjects;
 using XafDynamicAssemblies.Module.Services;
+using XafDynamicAssemblies.Module.Validation;
 
 namespace XafDynamicAssemblies.Module
 {
@@ -43,6 +44,7 @@ namespace XafDynamicAssemblies.Module
             DegradedMode = false;
             DegradedModeReason = null;
             ApiExposedClassNames = new();
+            SchemaGuard.Reset();
 
             // Reset XAF's TypesInfo to force full re-initialization on next host.
             // Without this, the process-static TypesInfo retains type registrations
@@ -228,6 +230,18 @@ namespace XafDynamicAssemblies.Module
 
         private void BootstrapRuntimeEntities(XafApplication application)
         {
+            // PERF-001: XAF creates a module instance per XafApplication, i.e. per Blazor circuit.
+            // Metadata query, DDL sync and compilation are process-wide work done once; a later
+            // circuit only needs its own AdditionalExportedTypes filled from the loaded assembly.
+            if (AssemblyManager.HasLoadedAssembly && AssemblyManager.RuntimeTypes.Length > 0)
+            {
+                var loaded = AssemblyManager.RuntimeTypes;
+                XafDynamicAssembliesEFCoreDbContext.RuntimeEntityTypes = loaded; // same instance: no ModelVersion bump
+                RefreshRuntimeTypes(loaded);
+                SchemaChangeOrchestrator.Instance.SetKnownTypeNames(loaded.Select(t => t.Name));
+                return;
+            }
+
             DegradedMode = false;
             DegradedModeReason = null;
 
@@ -301,7 +315,7 @@ namespace XafDynamicAssemblies.Module
         /// Removes previously-added runtime types first to prevent duplicates
         /// across hot-load cycles or multiple Setup calls.
         /// </summary>
-        public void RefreshRuntimeTypes(Type[] runtimeTypes)
+        private void RefreshRuntimeTypes(Type[] runtimeTypes)
         {
             // Remove previously-added runtime types
             foreach (var oldType in _addedRuntimeTypes)
@@ -325,6 +339,7 @@ namespace XafDynamicAssemblies.Module
         internal static List<CustomClass> QueryMetadata(string connectionString)
         {
             var classes = new List<CustomClass>();
+            SchemaGuard.Reset(); // every early return below means "nothing skipped"
 
             using var conn = new NpgsqlConnection(connectionString);
             conn.Open();
@@ -381,7 +396,9 @@ namespace XafDynamicAssemblies.Module
             var classIds = string.Join(",", classMap.Keys.Select(id => $"'{id}'"));
             using (var cmd = new NpgsqlCommand(
                 $@"SELECT ""CustomClassId"", ""FieldName"", ""TypeName"", ""IsRequired"", ""IsDefaultField"",
-                          ""Description"", ""ReferencedClassName"", ""SortOrder""
+                          ""Description"", ""ReferencedClassName"", ""SortOrder"",
+                          ""IsImmediatePostData"", ""StringMaxLength"", ""IsVisibleInListView"",
+                          ""IsVisibleInDetailView"", ""IsEditable"", ""ToolTip"", ""DisplayName""
                    FROM ""CustomFields""
                    WHERE ""CustomClassId"" IN ({classIds}) AND (""GCRecord"" IS NULL OR ""GCRecord"" = 0)
                    ORDER BY ""SortOrder"", ""FieldName""",
@@ -402,10 +419,23 @@ namespace XafDynamicAssemblies.Module
                             Description = reader.IsDBNull(5) ? null : reader.GetString(5),
                             ReferencedClassName = reader.IsDBNull(6) ? null : reader.GetString(6),
                             SortOrder = reader.GetInt32(7),
+                            // DATA-004: the UI attribute columns were never read, so hidden/read-only/
+                            // size/tooltip settings compiled with defaults on every deploy and restart.
+                            IsImmediatePostData = !reader.IsDBNull(8) && reader.GetBoolean(8),
+                            StringMaxLength = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                            IsVisibleInListView = reader.IsDBNull(10) || reader.GetBoolean(10),
+                            IsVisibleInDetailView = reader.IsDBNull(11) || reader.GetBoolean(11),
+                            IsEditable = reader.IsDBNull(12) || reader.GetBoolean(12),
+                            ToolTip = reader.IsDBNull(13) ? null : reader.GetString(13),
+                            DisplayName = reader.IsDBNull(14) ? null : reader.GetString(14),
                         });
                     }
                 }
             }
+
+            // DATA-007: drop fields whose column can no longer materialize the metadata type
+            // (add-only DDL cannot fix a TypeName change); reasons go to SkippedFieldWarnings.
+            SchemaGuard.Sanitize(conn, classes);
 
             return classes;
         }
